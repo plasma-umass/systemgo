@@ -14,20 +14,14 @@ import (
 
 const MAXLENGTH = 2048
 
-var (
-	// Map containing all units found
-	Units map[string]*Unit
-
-	// Slice of all loaded units
-	Loaded []*Unit
-)
-
 // Struct representing the unit
 type Unit struct {
 	*Definition
 	*exec.Cmd
 	Loaded bool
 	Status status
+	//Name      string
+	//ShortName string
 }
 
 // Definition as found in the unit specification file
@@ -54,14 +48,15 @@ const (
 )
 
 // Looks for unit files in paths given and adds to 'Units' map
-func ParseDir(paths ...string) (err error) {
-	Units = map[string]*Unit{}
+func ParseDir(paths ...string) (map[string]*Unit, error) {
+	units := map[string]*Unit{}
 	for _, path := range paths {
+		var err error
 		var file *os.File
 		var files []os.FileInfo
 
 		if file, err = os.Open(path); err != nil {
-			return
+			return nil, err
 		}
 		if files, err = file.Readdir(0); err != nil {
 			if err == io.EOF {
@@ -69,7 +64,7 @@ func ParseDir(paths ...string) (err error) {
 				err = nil
 				break
 			}
-			return
+			return nil, err
 		}
 
 		for _, f := range files {
@@ -78,18 +73,19 @@ func ParseDir(paths ...string) (err error) {
 			fpath := path + "/" + f.Name()
 
 			if f.IsDir() {
-				return ParseDir(fpath)
+				//return ParseDir(fpath)
+				return nil, errors.New("not implemented yet") //TODO
 			}
 			if file, err = os.Open(fpath); err != nil {
-				return
+				return nil, err
 			}
 			if def, err = ParseUnit(file); err != nil {
-				return errors.New("Error parsing " + fpath + ": " + err.Error())
+				return nil, errors.New("error parsing " + fpath + ": " + err.Error())
 			}
-			Units[f.Name()] = &Unit{Definition: def}
+			units[f.Name()] = &Unit{Definition: def}
 		}
 	}
-	return
+	return units, nil
 }
 
 // Attempts to parse a specification of a unit
@@ -128,6 +124,10 @@ func (u *Unit) Start() error {
 
 // Stops execution of the unit's specified command
 func (u *Unit) Stop() error {
+	if u.Loaded != true {
+		return errors.New("unit not loaded")
+	}
+
 	u.Loaded = false
 	return u.Process.Kill()
 }
