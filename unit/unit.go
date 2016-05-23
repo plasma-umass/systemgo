@@ -38,7 +38,7 @@ type Unit struct {
 // Definition as found in the unit specification file
 type Definition struct {
 	Unit struct {
-		Description                              string
+		Description                               string
 		After, Wants, Requires, Conflicts, Before []string
 	}
 	Service struct {
@@ -63,6 +63,7 @@ type status int
 
 const (
 	Inactive status = iota
+	Loading
 	Active
 	Exited
 	Failed

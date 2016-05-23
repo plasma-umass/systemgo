@@ -4,9 +4,9 @@ package unit
 
 import "fmt"
 
-const _status_name = "InactiveActiveExitedFailed"
+const _status_name = "InactiveLoadingActiveExitedFailed"
 
-var _status_index = [...]uint8{0, 8, 14, 20, 26}
+var _status_index = [...]uint8{0, 8, 15, 21, 27, 33}
 
 func (i status) String() string {
 	if i < 0 || i >= status(len(_status_index)-1) {
