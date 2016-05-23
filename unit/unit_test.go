@@ -20,6 +20,7 @@ var (
 				"test1.service", true,
 				`[Unit]
 			Description=test service 1
+			After=override.service test2.service
 			[Service]
 			ExecStart=echo test 1	
 				`,

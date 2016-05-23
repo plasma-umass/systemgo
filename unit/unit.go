@@ -7,7 +7,9 @@ import (
 	"os"
 	"os/exec"
 	"reflect"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/coreos/go-systemd/unit"
 )
@@ -16,14 +18,19 @@ var supported = map[string]bool{
 	"simple": true,
 }
 
+var (
+	Units  map[string]*Unit
+	Loaded map[*Unit]bool
+)
+
 const MAXLENGTH = 2048
 
 // Struct representing the unit
 type Unit struct {
 	*Definition
 	*exec.Cmd
-	Loaded bool
 	Status status
+	State  state
 	//Name      string
 	//ShortName string
 }
@@ -31,7 +38,8 @@ type Unit struct {
 // Definition as found in the unit specification file
 type Definition struct {
 	Unit struct {
-		Description, After, Wants string
+		Description                              string
+		After, Wants, Requires, Conflicts, Before []string
 	}
 	Service struct {
 		//Type                        ServiceType
@@ -60,7 +68,16 @@ const (
 	Failed
 )
 
-// Looks for unit files in paths given and adds to 'Units' map
+type state int
+
+const (
+	Static state = iota
+	Indirect
+	Disabled
+	Enabled
+)
+
+// Looks for unit files in paths given and returns a map of units
 func ParseDir(paths ...string) (map[string]*Unit, error) {
 	units := map[string]*Unit{}
 	for _, path := range paths {
@@ -88,7 +105,7 @@ func ParseDir(paths ...string) (map[string]*Unit, error) {
 			if f.IsDir() {
 				//return ParseDir(fpath)
 				//			return nil, errors.New("not implemented yet") //TODO
-				log.Println("directory parsing not implemented yet")
+				log.Println("recursive directory parsing not implemented yet")
 				continue
 			}
 			if file, err = os.Open(fpath); err != nil {
@@ -120,7 +137,22 @@ func ParseUnit(specification io.Reader) (*Definition, error) {
 	for _, opt := range opts {
 		if v := def.FieldByName(opt.Section); v.IsValid() {
 			if v := v.FieldByName(opt.Name); v.IsValid() {
-				v.SetString(opt.Value)
+				switch v.Kind() {
+				case reflect.SliceOf(reflect.TypeOf(reflect.String)).Kind():
+					values := strings.Split(opt.Value, " ")
+					v.Set(reflect.ValueOf(values))
+				case reflect.SliceOf(reflect.TypeOf(reflect.Int)).Kind():
+					values := strings.Split(opt.Value, " ")
+					ints := make([]int, len(values), len(values))
+					for i, val := range values {
+						if ints[i], err = strconv.Atoi(val); err != nil {
+							return nil, errors.New("Error parsing " + opt.Name + ": " + err.Error())
+						}
+					}
+					v.Set(reflect.ValueOf(ints))
+				default:
+					v.SetString(opt.Value)
+				}
 			} else {
 				return nil, errors.New("field " + opt.Name + " does not exist")
 			}
@@ -133,41 +165,97 @@ func ParseUnit(specification io.Reader) (*Definition, error) {
 		return nil, errors.New("'ExecStart' field not set")
 	}
 
-	switch definition.Service.Type {
-	case "":
+	if definition.Service.Type == "" {
 		definition.Service.Type = "simple"
-	default:
-		if !supported[definition.Service.Type] {
-			return nil, errors.New("service type " + definition.Service.Type + " does not exist or is not supported yet")
-		}
+	}
+
+	if !supported[definition.Service.Type] {
+		return nil, errors.New("service type " + definition.Service.Type + " does not exist or is not supported yet")
 	}
 
 	return definition, nil
 }
 
 // Starts execution of the unit's specified command
-func (u *Unit) Start() error {
+func (u *Unit) Start() (err error) {
 	cmd := strings.Split(u.Service.ExecStart, " ")
 	u.Cmd = exec.Command(cmd[0], strings.Join(cmd[1:], " "))
 
-	u.Loaded = true
-	return u.Cmd.Start()
+	for _, name := range u.Definition.Unit.Conflicts {
+		if dep, ok := Units[name]; ok {
+			if Loaded[dep] {
+				return errors.New("conflicts with " + name)
+			}
+		}
+	}
+	for _, name := range u.Definition.Unit.Requires {
+		if dep, ok := Units[name]; !ok {
+			return errors.New(name + " not found")
+		} else {
+			if !Loaded[dep] {
+				if err = dep.Start(); err != nil {
+					return
+				}
+			}
+			if dep.GetStatus() != Active {
+				return errors.New(name + " failed to launch")
+			}
+		}
+	}
+	for _, name := range u.Definition.Unit.Wants {
+		if dep, ok := Units[name]; !ok {
+			return errors.New(name + " not found")
+		} else {
+			if !Loaded[dep] {
+				if err = dep.Start(); err != nil {
+					return
+				}
+			}
+		}
+	}
+	for _, name := range u.Definition.Unit.After {
+		if dep, ok := Units[name]; !ok {
+			return errors.New(name + " not found")
+		} else {
+			for !Loaded[dep] {
+				time.Sleep(time.Second)
+			}
+		}
+	}
+
+	switch u.Service.Type {
+	case "simple":
+		err = u.Cmd.Start()
+	case "oneshot":
+		err = u.Cmd.Run()
+	case "forking", "dbus", "notify", "idle":
+		return errors.New(u.Service.Type + " not implemented yet") // TODO
+	default:
+		return errors.New(u.Service.Type + " does not exist")
+	}
+	Loaded[u] = true
+
+	return
 }
 
 // Stops execution of the unit's specified command
-func (u *Unit) Stop() error {
-	if !u.Loaded {
+func (u *Unit) Stop() (err error) {
+	if !Loaded[u] {
 		return errors.New("unit not loaded")
 	}
 
-	u.Loaded = false
-	return u.Process.Kill()
+	err = u.Process.Kill()
+	//u.Loaded = false
+	delete(Loaded, u)
+	return
 }
 
-func (u *Unit) Reload() error {
-	if err := u.Stop(); err != nil {
-		return err
+// Stop and restart unit execution
+func (u *Unit) Restart() (err error) {
+	if err = u.Stop(); err != nil {
+		return
 	}
+	delete(Loaded, u)
 
 	var cmd []string
 	if u.Service.ExecReload == "" {
@@ -177,6 +265,40 @@ func (u *Unit) Reload() error {
 	}
 	u.Cmd = exec.Command(cmd[0], strings.Join(cmd[1:], " "))
 
-	u.Loaded = true
-	return u.Cmd.Start()
+	err = u.Cmd.Start()
+	//u.Loaded = true
+	Loaded[u] = true
+	return
+}
+
+// Reload unit definition
+func (u *Unit) Reload() error {
+	//u.Definition, _ = ParseUnit(u)
+	return errors.New("not implemented yet") // TODO
+}
+
+func (u *Unit) GetStatus() status {
+	// TODO: Fixme, check proper state
+	switch {
+	case u.Cmd.ProcessState == nil:
+		switch u.Status {
+		case Failed:
+			return Failed
+		default:
+			return Inactive
+		}
+	case u.Cmd.ProcessState.Success():
+		switch u.Service.Type {
+		case "oneshot":
+			return Active
+		case "simple":
+			return Exited
+		default:
+			return Failed
+		}
+	case u.Cmd.ProcessState.Exited():
+		return Failed
+	default:
+		return Active
+	}
 }

@@ -16,7 +16,7 @@ type GlobalState struct {
 	Units map[string]*unit.Unit
 
 	// Slice of all loaded units
-	Loaded []*unit.Unit
+	Loaded map[*unit.Unit]bool
 
 	// Status of global state
 	State state
@@ -72,28 +72,48 @@ func main() {
 		log.Fatalln(err.Error())
 	}
 
+	unit.Units = State.Units
+	unit.Loaded = State.Loaded
+
 	var services []byte
 	if services, err = ioutil.ReadFile("services.json"); err != nil {
 		log.Fatalln(err.Error())
 	}
 
+	//var enabled map[string]*unit.Unit
 	var enabled []string
 	if err = json.Unmarshal(services, &enabled); err != nil {
 		log.Fatalln("Error reading services.json: ", err.Error())
 	}
 
 	for _, name := range enabled {
-		if u, ok := State.Units[name]; !ok {
+		if _, ok := State.Units[name]; !ok {
 			log.Println("unit " + name + " not found")
 		} else {
 			go func() {
-				if err = u.Start(); err != nil {
-					log.Println(err.Error())
+				if err := State.Units[name].Start(); err != nil {
+					log.Println("Error starting", name, err.Error())
 				}
-				State.Lock()
-				State.Loaded = append(State.Loaded, u)
-				State.Unlock()
 			}()
 		}
 	}
 }
+
+//func StartUnit(name string) (err error) {
+//u, ok := Units[name]
+//if !ok {
+//return errors.New("unit "+name+" not found")
+//}
+//for {
+//if u.DepsLoaded() {
+//if err = u.Start(); err != nil {
+//return
+//}
+//break
+//}
+//time.Sleep(time.Second)
+//}
+//State.Lock()
+//Loaded[name] = true
+//State.Unlock()
+//}
