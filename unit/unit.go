@@ -35,7 +35,7 @@ type Definition struct {
 	}
 	Service struct {
 		//Type                        ServiceType
-		Type, ExecStart, WorkingDirectory string
+		Type, ExecStart, ExecReload, WorkingDirectory string
 	}
 	Install struct {
 		// WIP
@@ -156,10 +156,27 @@ func (u *Unit) Start() error {
 
 // Stops execution of the unit's specified command
 func (u *Unit) Stop() error {
-	if u.Loaded != true {
+	if !u.Loaded {
 		return errors.New("unit not loaded")
 	}
 
 	u.Loaded = false
 	return u.Process.Kill()
+}
+
+func (u *Unit) Reload() error {
+	if err := u.Stop(); err != nil {
+		return err
+	}
+
+	var cmd []string
+	if u.Service.ExecReload == "" {
+		cmd = strings.Split(u.Service.ExecStart, " ")
+	} else {
+		cmd = strings.Split(u.Service.ExecReload, " ")
+	}
+	u.Cmd = exec.Command(cmd[0], strings.Join(cmd[1:], " "))
+
+	u.Loaded = true
+	return u.Cmd.Start()
 }
