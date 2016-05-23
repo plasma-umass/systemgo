@@ -19,17 +19,17 @@ var (
 			{
 				"test1.service", true,
 				`[Unit]
-				Description=test service 1
-				[Service]
-				ExecStart=echo test 1	
+			Description=test service 1
+			[Service]
+			ExecStart=echo test 1	
 				`,
 			},
 			{
 				"override.service", true,
 				`[Unit]
-				Description=Not overriden
-				[Service]
-				ExecStart=echo test 2
+			Description=Not overriden
+			[Service]
+			ExecStart=echo test 2
 				`,
 			},
 		},
@@ -37,18 +37,27 @@ var (
 			{
 				"override.service", true,
 				`[Unit]
-				Description=Overriden
-				[Service]
-				ExecStart=echo test 2	
+			Description=Overriden
+			[Service]
+			ExecStart=echo test 2	
 				`,
 			},
 			{
 				"test3.service", false,
 				`[Unit]
-				Description=test service 3
-				FooBar=foo
-				[Service]
-				ExecStart=echo test 3
+			Description=test service 3
+			FooBar=foo
+			[Service]
+			ExecStart=echo test 3
+				`,
+			},
+			{
+				"test4.service", false,
+				`[Unit]
+			Description=test service 3
+			[Service]
+			Type="foobar"
+			ExecStart=echo test 3
 				`,
 			},
 		},
@@ -98,21 +107,27 @@ func ExampleStatus() {
 }
 
 func TestParse(t *testing.T) {
-	if err := CreateUnits(); err != nil {
+	var err error
+	var units map[string]*Unit
+	if err = CreateUnits(); err != nil {
 		log.Fatalln(err.Error())
 	}
-	if err := ParseDir(paths...); err != nil {
+	if units, err = ParseDir(paths...); err != nil {
 		log.Println(err.Error())
 	}
 
 	for _, dir := range tests {
 		for _, unit := range dir {
-			if _, ok := Units[unit.name]; ok != unit.correct {
+			if _, ok := units[unit.name]; ok != unit.correct {
 				t.Error(unit.name, "should be", unit.correct)
 			}
 		}
 	}
-	u, _ := Units["override.service"]
+	u, ok := units["override.service"]
+	if !ok {
+		t.Error("override.service is not there")
+		return
+	}
 	if u.Unit.Description != "Overriden" {
 		t.Error("Unit file specification was not overriden")
 	}

@@ -12,6 +12,10 @@ import (
 	"github.com/coreos/go-systemd/unit"
 )
 
+var supported = map[string]bool{
+	"simple": true,
+}
+
 const MAXLENGTH = 2048
 
 // Struct representing the unit
@@ -30,12 +34,21 @@ type Definition struct {
 		Description, After, Wants string
 	}
 	Service struct {
-		Type, ExecStart string
+		//Type                        ServiceType
+		Type, ExecStart, WorkingDirectory string
 	}
 	Install struct {
 		// WIP
 	}
 }
+
+//type ServiceType string
+
+//const (
+//Simple  ServiceType = ""
+//Oneshot             = "oneshot"
+//Forking             = "forking"
+//)
 
 // Execution status of a unit
 type status int
@@ -74,14 +87,19 @@ func ParseDir(paths ...string) (map[string]*Unit, error) {
 
 			if f.IsDir() {
 				//return ParseDir(fpath)
-				return nil, errors.New("not implemented yet") //TODO
+				//			return nil, errors.New("not implemented yet") //TODO
+				log.Println("directory parsing not implemented yet")
+				continue
 			}
 			if file, err = os.Open(fpath); err != nil {
 				return nil, err
 			}
 			if def, err = ParseUnit(file); err != nil {
-				return nil, errors.New("error parsing " + fpath + ": " + err.Error())
+				//return nil, errors.New("error parsing " + fpath + ": " + err.Error())
+				log.Println("error parsing " + fpath + ": " + err.Error())
+				continue
 			}
+
 			units[f.Name()] = &Unit{Definition: def}
 		}
 	}
@@ -89,13 +107,13 @@ func ParseDir(paths ...string) (map[string]*Unit, error) {
 }
 
 // Attempts to parse a specification of a unit
-func ParseUnit(file io.Reader) (*Definition, error) {
+func ParseUnit(specification io.Reader) (*Definition, error) {
 	var err error
 	var opts []*unit.UnitOption
 	definition := &Definition{}
 	def := reflect.ValueOf(definition).Elem()
 
-	if opts, err = unit.Deserialize(file); err != nil {
+	if opts, err = unit.Deserialize(specification); err != nil {
 		return nil, err
 	}
 
@@ -110,6 +128,20 @@ func ParseUnit(file io.Reader) (*Definition, error) {
 			return nil, errors.New("section " + opt.Section + " does not exist")
 		}
 	}
+
+	if definition.Service.ExecStart == "" {
+		return nil, errors.New("'ExecStart' field not set")
+	}
+
+	switch definition.Service.Type {
+	case "":
+		definition.Service.Type = "simple"
+	default:
+		if !supported[definition.Service.Type] {
+			return nil, errors.New("service type " + definition.Service.Type + " does not exist or is not supported yet")
+		}
+	}
+
 	return definition, nil
 }
 
