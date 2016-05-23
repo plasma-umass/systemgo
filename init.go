@@ -72,6 +72,7 @@ func main() {
 		log.Fatalln(err.Error())
 	}
 
+	State.Loaded = map[*unit.Unit]bool{}
 	unit.Units = State.Units
 	unit.Loaded = State.Loaded
 
@@ -87,14 +88,23 @@ func main() {
 	}
 
 	for _, name := range enabled {
-		if _, ok := State.Units[name]; !ok {
+		if u, ok := State.Units[name]; !ok {
 			log.Println("unit " + name + " not found")
+			break
 		} else {
 			go func() {
-				if err := State.Units[name].Start(); err != nil {
+				if err = u.Start(); err != nil {
 					log.Println("Error starting", name, err.Error())
 				}
 			}()
+		}
+	}
+	for {
+		select {
+		case err := <-unit.Errs:
+			log.Println(err.Error())
+		default:
+			time.Sleep(time.Second)
 		}
 	}
 }

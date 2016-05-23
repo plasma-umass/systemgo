@@ -20,7 +20,8 @@ var (
 				"test1.service", true,
 				`[Unit]
 			Description=test service 1
-			After=override.service test2.service
+			Requires=override.service
+			After=override.service test4.service
 			[Service]
 			ExecStart=echo test 1	
 				`,
@@ -29,6 +30,7 @@ var (
 				"override.service", true,
 				`[Unit]
 			Description=Not overriden
+			Requires=test3.service
 			[Service]
 			ExecStart=echo test 2
 				`,
@@ -39,6 +41,8 @@ var (
 				"override.service", true,
 				`[Unit]
 			Description=Overriden
+			Wants=test4.service
+			Requires=test1.service
 			[Service]
 			ExecStart=echo test 2	
 				`,
@@ -131,6 +135,29 @@ func TestParse(t *testing.T) {
 	}
 	if u.Unit.Description != "Overriden" {
 		t.Error("Unit file specification was not overriden")
+	}
+	if err := RemoveUnits(); err != nil {
+		log.Fatalln(err.Error())
+	}
+}
+
+func TestStart(t *testing.T) {
+	var err error
+	var units map[string]*Unit
+	if err = CreateUnits(); err != nil {
+		log.Fatalln(err.Error())
+	}
+	if units, err = ParseDir(paths...); err != nil {
+		log.Println(err.Error())
+	}
+
+	Units = units
+	Loaded = map[*Unit]bool{}
+
+	for _, u := range units {
+		if err = u.Start(); err != nil {
+			log.Println(err.Error())
+		}
 	}
 	if err := RemoveUnits(); err != nil {
 		log.Fatalln(err.Error())

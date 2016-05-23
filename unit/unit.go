@@ -23,7 +23,9 @@ var (
 	Loaded map[*Unit]bool
 )
 
-const MAXLENGTH = 2048
+var Errs = make(chan error, 1)
+
+//const MAXLENGTH = 2048
 
 // Struct representing the unit
 type Unit struct {
@@ -118,7 +120,7 @@ func ParseDir(paths ...string) (map[string]*Unit, error) {
 				continue
 			}
 
-			units[f.Name()] = &Unit{Definition: def}
+			units[f.Name()] = &Unit{Definition: def /*, Status: Inactive, State: Static*/}
 		}
 	}
 	return units, nil
@@ -179,6 +181,12 @@ func ParseUnit(specification io.Reader) (*Definition, error) {
 
 // Starts execution of the unit's specified command
 func (u *Unit) Start() (err error) {
+	if u.Status == Loading {
+		return
+	} else {
+		u.Status = Loading
+	}
+
 	cmd := strings.Split(u.Service.ExecStart, " ")
 	u.Cmd = exec.Command(cmd[0], strings.Join(cmd[1:], " "))
 
@@ -190,35 +198,46 @@ func (u *Unit) Start() (err error) {
 		}
 	}
 	for _, name := range u.Definition.Unit.Requires {
-		if dep, ok := Units[name]; !ok {
-			return errors.New(name + " not found")
-		} else {
-			if !Loaded[dep] {
-				if err = dep.Start(); err != nil {
+		go func() {
+			if dep, ok := Units[name]; !ok {
+				Errs <- errors.New(name + " not found")
+			} else {
+				if dep.Status == Loading {
 					return
 				}
+				if !Loaded[dep] {
+					log.Println("starting", name)
+					if err = dep.Start(); err != nil {
+						Errs <- errors.New("Error starting " + name + ": " + err.Error())
+						return
+					}
+					if dep.GetStatus() != Active {
+						Errs <- errors.New(name + " failed to launch")
+					}
+				}
 			}
-			if dep.GetStatus() != Active {
-				return errors.New(name + " failed to launch")
-			}
-		}
+		}()
 	}
 	for _, name := range u.Definition.Unit.Wants {
-		if dep, ok := Units[name]; !ok {
-			return errors.New(name + " not found")
-		} else {
-			if !Loaded[dep] {
-				if err = dep.Start(); err != nil {
-					return
+		go func() {
+			if dep, ok := Units[name]; !ok {
+				Errs <- errors.New(name + " not found")
+			} else {
+				if !Loaded[dep] {
+					log.Println("starting", name)
+					if err = dep.Start(); err != nil {
+						Errs <- errors.New("Error starting " + name + ": " + err.Error())
+					}
 				}
 			}
-		}
+		}()
 	}
 	for _, name := range u.Definition.Unit.After {
 		if dep, ok := Units[name]; !ok {
 			return errors.New(name + " not found")
 		} else {
 			for !Loaded[dep] {
+				log.Println("waiting for", name)
 				time.Sleep(time.Second)
 			}
 		}
