@@ -1,4 +1,0 @@
-[Unit]
-Description=hello service
-[Service]
-ExecStart=echo hi
