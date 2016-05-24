@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -15,7 +16,7 @@ var (
 		correct  bool
 		contents string
 	}{
-		"test1": {
+		"lib/systemd/system": {
 			{
 				"test1.service", true,
 				`[Unit]
@@ -36,7 +37,7 @@ var (
 				`,
 			},
 		},
-		"test2": {
+		"etc/systemd/system": {
 			{
 				"override.service", true,
 				`[Unit]
@@ -45,6 +46,7 @@ var (
 			Requires=test1.service
 			[Service]
 			ExecStart=echo test 2	
+			Restart=yes
 				`,
 			},
 			{
@@ -77,17 +79,17 @@ func init() {
 }
 
 func CreateUnits() error {
-	for dir, units := range tests {
-		if err := os.Mkdir(dir, 0755); err != nil {
-			return errors.New("Failed to create directory: " + err.Error())
+	for path, units := range tests {
+		if err := os.MkdirAll(path, 0755); err != nil {
+			return errors.New("Failed to create" + path + ": " + err.Error())
 		}
 		for _, unit := range units {
-			if u, err := os.Create(dir + "/" + unit.name); err != nil {
-				return errors.New("Failed to create file: " + err.Error())
+			if file, err := os.Create(path + "/" + unit.name); err != nil {
+				return errors.New("Failed to create" + path + "/" + unit.name + ": " + err.Error())
 			} else {
-				defer u.Close()
-				if _, err := u.Write([]byte(unit.contents)); err != nil {
-					return errors.New("Failed to write contents: " + err.Error())
+				defer file.Close()
+				if _, err := file.Write([]byte(unit.contents)); err != nil {
+					return errors.New("Failed to write contents to  " + file.Name() + ": " + err.Error())
 				}
 			}
 		}
@@ -96,9 +98,9 @@ func CreateUnits() error {
 }
 
 func RemoveUnits() error {
-	for dir, _ := range tests {
-		if err := os.RemoveAll(dir); err != nil {
-			return errors.New("Failed to remove directory " + dir + ": " + err.Error())
+	for path, _ := range tests {
+		if err := os.RemoveAll(strings.Split(path, "/")[0]); err != nil {
+			return errors.New("Failed to remove" + path + ": " + err.Error())
 		}
 	}
 	return nil
@@ -115,6 +117,10 @@ func TestParse(t *testing.T) {
 	var err error
 	var units map[string]*Unit
 	if err = CreateUnits(); err != nil {
+		log.Println("error")
+		if er := RemoveUnits(); err != nil {
+			log.Println(er.Error())
+		}
 		log.Fatalln(err.Error())
 	}
 	if units, err = ParseDir(paths...); err != nil {

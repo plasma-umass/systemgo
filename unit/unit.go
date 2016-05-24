@@ -29,11 +29,16 @@ type Unit struct {
 type Definition struct {
 	Unit struct {
 		Description                               string
+		Documentation                             []string
 		After, Wants, Requires, Conflicts, Before []string
 	}
 	Service struct {
 		//Type                        ServiceType
-		Type, ExecStart, ExecReload, WorkingDirectory string
+		Type                            string
+		ExecStart, ExecStop, ExecReload string
+		PIDFile                         string
+		Restart                         string
+		RemainAfterExit                 bool
 	}
 	Install struct {
 		// WIP

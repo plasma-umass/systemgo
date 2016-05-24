@@ -11,6 +11,13 @@ import (
 	"github.com/b1101/init/unit"
 )
 
+var paths = []string{
+	// Gentoo-specific
+	"/usr/lib/systemd/system",
+	// User overrides
+	"/etc/systemd/system",
+}
+
 type GlobalState struct {
 	// Map containing all units found
 	Units map[string]*unit.Unit
@@ -68,7 +75,7 @@ var (
 func main() {
 	var err error
 
-	if State.Units, err = unit.ParseDir("lib/systemd/system", "etc/systemd/system"); err != nil {
+	if State.Units, err = unit.ParseDir(paths...); err != nil {
 		log.Fatalln(err.Error())
 	}
 

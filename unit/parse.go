@@ -76,20 +76,26 @@ func ParseUnit(specification io.Reader) (*Unit, error) {
 		if v := def.FieldByName(opt.Section); v.IsValid() {
 			if v := v.FieldByName(opt.Name); v.IsValid() {
 				switch v.Kind() {
+				case reflect.String:
+					v.SetString(opt.Value)
+				case reflect.Bool:
+					if opt.Value == "yes" {
+						v.SetBool(true)
+					}
 				case reflect.SliceOf(reflect.TypeOf(reflect.String)).Kind():
-					values := strings.Split(opt.Value, " ")
-					v.Set(reflect.ValueOf(values))
+					v.Set(reflect.ValueOf(strings.Split(opt.Value, " ")))
 				case reflect.SliceOf(reflect.TypeOf(reflect.Int)).Kind():
-					values := strings.Split(opt.Value, " ")
-					ints := make([]int, len(values), len(values))
-					for i, val := range values {
-						if ints[i], err = strconv.Atoi(val); err != nil {
+					ints := []int{}
+					for _, val := range strings.Split(opt.Value, " ") {
+						if converted, err := strconv.Atoi(val); err == nil {
+							ints = append(ints, converted)
+						} else {
 							return nil, errors.New("Error parsing " + opt.Name + ": " + err.Error())
 						}
 					}
 					v.Set(reflect.ValueOf(ints))
 				default:
-					v.SetString(opt.Value)
+					return nil, errors.New("Can not parse " + opt.Name)
 				}
 			} else {
 				return nil, errors.New("field " + opt.Name + " does not exist")
