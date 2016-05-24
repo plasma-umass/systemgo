@@ -12,8 +12,19 @@ import (
 	"github.com/coreos/go-systemd/unit"
 )
 
-var supported = map[string]bool{
-	"simple": true,
+var supported = map[string]map[string]bool{
+	"type": {
+		"simple":  true,
+		"oneshot": true,
+	},
+	"field": {
+		"Description": true,
+		"After":       true,
+		"Wants":       true,
+		"Requires":    true,
+		"Conflicts":   true,
+		"ExecStart":   true,
+	},
 }
 
 // Looks for unit files in paths given and returns a map of units
@@ -113,7 +124,7 @@ func ParseUnit(specification io.Reader) (*Unit, error) {
 		definition.Service.Type = "simple"
 	}
 
-	if !supported[definition.Service.Type] {
+	if !supported["type"][definition.Service.Type] {
 		return nil, errors.New("service type " + definition.Service.Type + " does not exist or is not supported yet")
 	}
 

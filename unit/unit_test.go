@@ -1,6 +1,7 @@
 package unit
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"log"
@@ -14,58 +15,76 @@ var (
 	tests = map[string][]struct {
 		name     string
 		correct  bool
-		contents string
+		contents []byte
 	}{
 		"lib/systemd/system": {
 			{
 				"test1.service", true,
-				`[Unit]
+				[]byte(`[Unit]
 			Description=test service 1
 			Requires=override.service
 			After=override.service test4.service
 			[Service]
 			ExecStart=echo test 1	
-				`,
+				`),
 			},
 			{
 				"override.service", true,
-				`[Unit]
+				[]byte(`[Unit]
 			Description=Not overriden
 			Requires=test3.service
 			[Service]
 			ExecStart=echo test 2
-				`,
+				`),
 			},
 		},
 		"etc/systemd/system": {
 			{
 				"override.service", true,
-				`[Unit]
+				[]byte(`[Unit]
 			Description=Overriden
 			Wants=test4.service
 			Requires=test1.service
 			[Service]
 			ExecStart=echo test 2	
 			Restart=yes
-				`,
+		`),
 			},
 			{
 				"test3.service", false,
-				`[Unit]
+				[]byte(`[Unit]
 			Description=test service 3
 			FooBar=foo
 			[Service]
 			ExecStart=echo test 3
-				`,
+				`),
 			},
 			{
 				"test4.service", false,
-				`[Unit]
+				[]byte(`[Unit]
 			Description=test service 3
 			[Service]
 			Type="foobar"
 			ExecStart=echo test 3
-				`,
+				`),
+			},
+			{
+				"fieldtest.service", true,
+				[]byte(`[Unit]
+			Description=test fields
+			Documentation=foo.bar bar.foo
+			After=test1.service
+			Requires=test2.service
+			Wants=test3.service
+			Conflicts=nosuch.service
+			[Service]
+			Type=oneshot
+			ExecStart=echo field test start
+			ExecStop=echo field test stop
+			ExecReload=echo field test reload
+			Restart=yes
+			RemainAfterExit=True
+				`),
 			},
 		},
 	}
@@ -88,7 +107,7 @@ func CreateUnits() error {
 				return errors.New("Failed to create" + path + "/" + unit.name + ": " + err.Error())
 			} else {
 				defer file.Close()
-				if _, err := file.Write([]byte(unit.contents)); err != nil {
+				if _, err := file.Write(unit.contents); err != nil {
 					return errors.New("Failed to write contents to  " + file.Name() + ": " + err.Error())
 				}
 			}
@@ -147,6 +166,15 @@ func TestParse(t *testing.T) {
 	}
 }
 
+func TestFields(t *testing.T) {
+	test := bytes.NewReader(tests["etc/systemd/system"][3].contents)
+	if _, err := ParseUnit(test); err != nil {
+		log.Fatalln(err.Error())
+	} else {
+		// TODO: check
+	}
+}
+
 func TestStart(t *testing.T) {
 	var err error
 	var units map[string]*Unit
@@ -161,9 +189,11 @@ func TestStart(t *testing.T) {
 	Loaded = map[*Unit]bool{}
 
 	for _, u := range units {
-		if err = u.Start(); err != nil {
-			log.Println(err.Error())
-		}
+		go func() {
+			if err = u.Start(); err != nil {
+				log.Println(err.Error())
+			}
+		}()
 	}
 	if err := RemoveUnits(); err != nil {
 		log.Fatalln(err.Error())
