@@ -11,12 +11,12 @@ import (
 
 type Unit struct {
 	unit.Unit
-	*Definition
+	Definition
 	*exec.Cmd
 }
 type Definition struct {
 	unit.Definition
-	Service *struct {
+	Service struct {
 		Type                            string
 		ExecStart, ExecStop, ExecReload string
 		PIDFile                         string
@@ -46,7 +46,7 @@ func (u *Unit) Start() {
 	}
 
 	if err != nil {
-		u.Println(err.Error())
+		u.Log(err.Error())
 	}
 }
 
@@ -57,7 +57,7 @@ func (u *Unit) Sub() fmt.Stringer {
 // Stops execution of the unit's specified command
 func (u *Unit) Stop() {
 	if err := u.Process.Kill(); err != nil {
-		u.Println(err.Error())
+		u.Log(err.Error())
 	}
 }
 

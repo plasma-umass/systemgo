@@ -16,8 +16,9 @@ type Supervisable interface {
 
 	SetPath(string)
 	SetLoaded(LoadState)
+
 	SetOutput(io.Writer)
-	Println(v ...interface{})
+	Log(v ...interface{})
 
 	//Path() string
 	Status() Status
@@ -44,25 +45,24 @@ type Stopper interface {
 // Struct representing the unit
 type Unit struct {
 	*log.Logger
-	//Deps map[string]*controllable
+	Buffer bytes.Buffer
+
 	Deps      []Supervisable
 	Conflicts []Supervisable
-	Log       bytes.Buffer
-	//Read      func(p []byte) (n int, err error)
 
 	name   string
 	path   string
 	loaded LoadState
-	*Definition
+	//*Definition
 }
 
 type Definition struct {
-	Unit *struct {
+	Unit struct {
 		Description                               string
 		Documentation                             []string
 		After, Wants, Requires, Conflicts, Before []string
 	}
-	Install *struct {
+	Install struct {
 		WantedBy string
 	}
 }
@@ -70,6 +70,7 @@ type Definition struct {
 // Activation status of a unit
 type ActivationState int
 
+//go:generate stringer -type=ActivationState
 const (
 	Inactive ActivationState = iota
 	Activating
@@ -80,6 +81,7 @@ const (
 // Enable status of a unit
 type EnableState int
 
+//go:generate stringer -type=EnableState
 const (
 	Disabled EnableState = iota
 	Static
@@ -90,6 +92,7 @@ const (
 // Load status of a unit
 type LoadState int
 
+//go:generate stringer -type=LoadState
 const (
 	Loaded LoadState = iota
 	Error
@@ -122,12 +125,15 @@ func isUp(u Supervisable) bool {
 	}
 }
 
+func (u *Unit) Log(v ...interface{}) {
+	u.Logger.Println(v)
+}
 func (u *Unit) Read(p []byte) (n int, err error) {
-	return u.Log.Read(p)
+	return u.Buffer.Read(p)
 }
 
 func (u *Unit) Init() {
-	u.Logger = log.New(&u.Log, "", log.LstdFlags)
+	u.Logger = log.New(&u.Buffer, "", log.LstdFlags)
 	//u.Read = u.Log.Read
 }
 func (u *Unit) SetLoaded(state LoadState) {
@@ -162,9 +168,26 @@ func (u Unit) Status() Status {
 	}
 }
 
+func (s Status) String() string {
+	return fmt.Sprintf(`Loaded: %s
+Active: %s`, s.Load, s.Act)
+}
+
+func (s LoadStatus) String() string {
+	return fmt.Sprintf("%s (%s; %s; %s)",
+		s.Status, s.Path, s.State, s.Vendor)
+}
+func (s VendorStatus) String() string {
+	return fmt.Sprintf("vendor preset: %s",
+		s.State)
+}
+func (s ActivationStatus) String() string {
+	return fmt.Sprintf("%s (%s)",
+		s.Status, s.Sub)
+}
+
 // Starts unit's dependencies
 func (u *Unit) Start() {
-	u.Println("Starting", u.Unit.Description, "...")
 	for _, dep := range u.Conflicts {
 		if isUp(dep) {
 			//u.Println("Conflicts with", dep.Path())

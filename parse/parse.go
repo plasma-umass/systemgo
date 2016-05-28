@@ -68,9 +68,11 @@ func All(paths ...string) (map[string]unit.Supervisable, error) {
 					return err
 				} else {
 					if err := Definition(file, u); err != nil {
-						u.Println(err.Error())
+						//log.Println("error parsing", file.Name(), err.Error())
+						u.Log(err.Error())
 						u.SetLoaded(unit.Error)
 					}
+					u.SetPath(fpath)
 					file.Close()
 				}
 			}
@@ -111,8 +113,11 @@ func One(name string, paths ...string) (u unit.Supervisable) {
 func Definition(specification io.Reader, unit interface{}) error {
 	var err error
 	var opts []*systemd.UnitOption
-	def := reflect.ValueOf(unit) //.FieldByName("Definition").Elem()
-	if !def.CanSet() {
+	def := reflect.ValueOf(unit).Elem().FieldByName("Definition")
+
+	if !def.IsValid() {
+		return errors.New("Does not have a Definition field")
+	} else if !def.CanSet() {
 		return errors.New("received a non-pointer value")
 	}
 
@@ -121,7 +126,7 @@ func Definition(specification io.Reader, unit interface{}) error {
 	}
 
 	for _, opt := range opts {
-		if v := def.FieldByName(opt.Section).Elem(); v.IsValid() && v.CanSet() {
+		if v := def.FieldByName(opt.Section); v.IsValid() && v.CanSet() {
 			if v := v.FieldByName(opt.Name); v.IsValid() && v.CanSet() {
 				switch v.Kind() {
 				case reflect.String:
@@ -146,7 +151,7 @@ func Definition(specification io.Reader, unit interface{}) error {
 					return errors.New("Can not parse " + opt.Name)
 				}
 			} else {
-				return errors.New("field " + opt.Name + " does not exist")
+				return errors.New("field " + opt.Name + " does not exist at section " + opt.Section)
 			}
 		} else {
 			return errors.New("section " + opt.Section + " does not exist")

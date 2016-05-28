@@ -38,12 +38,13 @@ func main() {
 	}
 
 	for n, u := range State.Units {
-		fmt.Println("Loaded unit", n, u.Status())
+		fmt.Println(n)
+		fmt.Println(u.Status())
 		switch reader, ok := u.(io.Reader); {
 		case ok:
-			b := []byte{}
+			b := make([]byte, 100)
 			if n, _ := reader.Read(b); n > 0 {
-				fmt.Println("Log:")
+				fmt.Println("\nLog:")
 				fmt.Println(string(b))
 			}
 		default:
