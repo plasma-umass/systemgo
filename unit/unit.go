@@ -2,6 +2,7 @@ package unit
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -12,20 +13,19 @@ type Supervisable interface {
 	Start()
 	Stop()
 
-	Init()
-
 	SetPath(string)
 	SetLoaded(LoadState)
 
 	SetOutput(io.Writer)
 	Log(v ...interface{})
 
+	Description() string
 	//Path() string
-	Status() Status
 	Enabled() EnableState
 	Loaded() LoadState
 	Active() ActivationState
-	Sub() fmt.Stringer
+	Sub() string
+	Status() UnitStatus
 }
 type Reloader interface {
 	Reload()
@@ -50,10 +50,11 @@ type Unit struct {
 	Deps      []Supervisable
 	Conflicts []Supervisable
 
-	name   string
-	path   string
-	loaded LoadState
-	//*Definition
+	name string
+	//path   string
+	//loaded LoadState
+	*Definition
+	loadStatus LoadStatus
 }
 
 type Definition struct {
@@ -98,7 +99,7 @@ const (
 	Error
 )
 
-type Status struct {
+type UnitStatus struct {
 	Load LoadStatus
 	Act  ActivationStatus
 }
@@ -116,6 +117,14 @@ type VendorStatus struct {
 	State EnableState
 }
 
+func New() (u *Unit) {
+	u = &Unit{}
+	u.Logger = log.New(&u.Buffer, "", log.LstdFlags)
+	u.Definition = &Definition{}
+	return
+	//u.Read = u.Log.Read
+}
+
 func isUp(u Supervisable) bool {
 	switch u.Active() {
 	case Active:
@@ -125,50 +134,74 @@ func isUp(u Supervisable) bool {
 	}
 }
 
-func (u *Unit) Log(v ...interface{}) {
-	u.Logger.Println(v)
+func Status(u Supervisable) UnitStatus {
+	return u.Status()
 }
-func (u *Unit) Read(p []byte) (n int, err error) {
-	return u.Buffer.Read(p)
+func IsEnabled(u Supervisable) EnableState {
+	return u.Enabled()
+}
+func IsActive(u Supervisable) ActivationState {
+	return u.Active()
+}
+func ReadLog(u Supervisable) (*[]byte, error) {
+	b := make([]byte, 1000)
+	switch reader, ok := u.(io.Reader); {
+	case ok:
+		switch n, err := reader.Read(b); {
+		case err != nil && err != io.EOF:
+			return nil, err
+		case n > 0:
+			return &b, nil
+		default:
+			return nil, nil
+		}
+	default:
+		return nil, errors.New("unreadable")
+	}
 }
 
-func (u *Unit) Init() {
-	u.Logger = log.New(&u.Buffer, "", log.LstdFlags)
-	//u.Read = u.Log.Read
-}
 func (u *Unit) SetLoaded(state LoadState) {
-	u.loaded = state
+	u.loadStatus.Status = state
 }
 func (u *Unit) SetPath(path string) {
-	u.path = path
+	u.loadStatus.Path = path
 }
 
+func (u Unit) Log(v ...interface{}) {
+	u.Logger.Println(v)
+}
+func (u Unit) Read(p []byte) (n int, err error) {
+	return u.Buffer.Read(p)
+}
 func (u Unit) Name() string {
 	return u.name
 }
+func (u Unit) Description() string {
+	return u.Definition.Unit.Description
+}
 func (u Unit) Path() string {
-	return u.path
+	return u.loadStatus.Path
 }
 func (u Unit) Enabled() EnableState {
 	return Enabled // TODO: fixme
 }
 func (u Unit) Loaded() LoadState {
-	return u.loaded
+	return u.loadStatus.Status
 }
 func (u Unit) Active() ActivationState {
 	return Active // TODO: fixme
 }
 func (u Unit) Sub() string {
-	return "sub" // TODO: fixme
+	return "unavailable"
 }
-func (u Unit) Status() Status {
-	return Status{
+func (u Unit) Status() UnitStatus {
+	return UnitStatus{
 		LoadStatus{u.Loaded(), u.Path(), u.Enabled(), VendorStatus{u.Enabled()}}, // TODO:fixme
 		ActivationStatus{u.Active(), u.Sub()},
 	}
 }
 
-func (s Status) String() string {
+func (s UnitStatus) String() string {
 	return fmt.Sprintf(`Loaded: %s
 Active: %s`, s.Load, s.Act)
 }

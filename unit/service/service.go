@@ -2,7 +2,6 @@ package service
 
 import (
 	"errors"
-	"fmt"
 	"os/exec"
 	"strings"
 
@@ -10,12 +9,12 @@ import (
 )
 
 type Unit struct {
-	unit.Unit
-	Definition
+	*unit.Unit
+	*Definition
 	*exec.Cmd
 }
 type Definition struct {
-	unit.Definition
+	*unit.Definition
 	Service struct {
 		Type                            string
 		ExecStart, ExecStop, ExecReload string
@@ -24,6 +23,13 @@ type Definition struct {
 		RemainAfterExit                 bool
 		//Type                        ServiceType
 	}
+}
+
+func New() unit.Supervisable {
+	service := &Unit{}
+	service.Unit = unit.New()
+	service.Definition = &Definition{Definition: service.Unit.Definition}
+	return service
 }
 
 func (u *Unit) Start() {
@@ -48,10 +54,6 @@ func (u *Unit) Start() {
 	if err != nil {
 		u.Log(err.Error())
 	}
-}
-
-func (u *Unit) Sub() fmt.Stringer {
-	return unit.Active
 }
 
 // Stops execution of the unit's specified command

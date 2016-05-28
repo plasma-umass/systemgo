@@ -13,12 +13,14 @@ import (
 
 	"github.com/b1101/systemgo/unit"
 	"github.com/b1101/systemgo/unit/service"
+	"github.com/b1101/systemgo/unit/target"
 	systemd "github.com/coreos/go-systemd/unit"
 )
 
 var (
-	types = map[string]reflect.Type{
-		"service": reflect.TypeOf(service.Unit{}),
+	constructors = map[string]func() unit.Supervisable{
+		"service": service.New,
+		"target":  target.New,
 	}
 	re = map[string]string{
 		"all":       "*.service|*.target|*.automount|*.device|*.mount|*.path|*.scope|*.slice|*.snapshot|*.socket|*.swap|*.timer",
@@ -113,12 +115,10 @@ func One(name string, paths ...string) (u unit.Supervisable) {
 func Definition(specification io.Reader, unit interface{}) error {
 	var err error
 	var opts []*systemd.UnitOption
-	def := reflect.ValueOf(unit).Elem().FieldByName("Definition")
+	def := reflect.ValueOf(unit).Elem().FieldByName("Definition").Elem()
 
 	if !def.IsValid() {
 		return errors.New("Does not have a Definition field")
-	} else if !def.CanSet() {
-		return errors.New("received a non-pointer value")
 	}
 
 	if opts, err = systemd.Deserialize(specification); err != nil {
@@ -189,15 +189,19 @@ func is(typ, name string) bool {
 
 // matchAndCreate determines the unit type by name and returns a Supervisable of that type
 func matchAndCreate(name string) (unit.Supervisable, error) {
-	for suffix, t := range types {
+	//for suffix, init := range types {
+	for suffix, u := range constructors {
 		if is(suffix, name) {
-			switch u, ok := reflect.New(t).Interface().(unit.Supervisable); {
-			case !ok:
-				return nil, errors.New("unit type is not Supervisable")
-			default:
-				u.Init()
-				return u, nil
-			}
+			return u(), nil
+			//return new, nil
+			//switch u, ok := reflect.New(t).Interface().(unit.Supervisable); {
+			//switch u, ok := new(); {
+			//case !ok:
+			//return nil, errors.New("unit type is not Supervisable")
+			//default:
+			//u.Init()
+			//return u, nil
+			//}
 		}
 	}
 	return nil, errors.New(name + " does not match any known unit type")

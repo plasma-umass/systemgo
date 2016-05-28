@@ -3,11 +3,11 @@ package main
 import (
 	"errors"
 	"fmt"
-	"io"
 	"log"
 
 	"github.com/b1101/systemgo/parse"
 	"github.com/b1101/systemgo/system"
+	"github.com/b1101/systemgo/unit"
 )
 
 type Reloader interface {
@@ -38,17 +38,11 @@ func main() {
 	}
 
 	for n, u := range State.Units {
-		fmt.Println(n)
-		fmt.Println(u.Status())
-		switch reader, ok := u.(io.Reader); {
-		case ok:
-			b := make([]byte, 100)
-			if n, _ := reader.Read(b); n > 0 {
-				fmt.Println("\nLog:")
-				fmt.Println(string(b))
-			}
-		default:
-			log.Println(n, "not readable")
+		fmt.Printf("%s - %s\n%s\n", n, u.Description(), u.Status())
+		if b, err := unit.ReadLog(u); err != nil {
+			log.Println("Error reading log:", err.Error())
+		} else if b != nil {
+			fmt.Printf("Log:\n%s", string(*b))
 		}
 		fmt.Println()
 	}
