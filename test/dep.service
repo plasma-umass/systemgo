@@ -1,0 +1,6 @@
+[Unit]
+Description=Test dep
+[Service]
+Type=oneshot
+#ExecStart=echo second >> testfile
+ExecStart=test/dep.sh

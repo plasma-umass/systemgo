@@ -1,0 +1,6 @@
+[Unit]
+Description=Test
+Requires=dep.service
+After=dep.service
+[Service]
+ExecStart=test/sv.sh
