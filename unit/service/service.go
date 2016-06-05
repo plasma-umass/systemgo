@@ -2,9 +2,11 @@ package service
 
 import (
 	"errors"
+	"io"
 	"os/exec"
 	"strings"
 
+	"github.com/b1101/systemgo/lib/state"
 	"github.com/b1101/systemgo/unit"
 )
 
@@ -25,21 +27,31 @@ type Definition struct {
 	}
 }
 
-func New() unit.Supervisable {
+func New(definition io.Reader) (*Unit, error) {
 	service := &Unit{}
 	service.Unit = unit.New()
 	service.Definition = &Definition{Definition: service.Unit.Definition}
-	return service
+
+	if err := unit.Define(definition, service.Definition); err != nil {
+		return nil, err
+	}
+
+	switch def := service.Definition; {
+	case def.Service.ExecStart == "":
+		return nil, errors.New("ExecStart field not set")
+		fallthrough
+	case def.Service.Type == "":
+		def.Service.Type = "simple"
+		fallthrough
+	default:
+		cmd := strings.Split(def.Service.ExecStart, " ")
+		service.Cmd = exec.Command(cmd[0], cmd[1:]...)
+
+		return service, nil
+	}
 }
 
-func (u *Unit) Start() {
-	var err error
-
-	u.Unit.Start()
-
-	cmd := strings.Split(u.Service.ExecStart, " ")
-	u.Cmd = exec.Command(cmd[0], strings.Join(cmd[1:], " "))
-
+func (u *Unit) Start() (err error) {
 	switch u.Service.Type {
 	case "simple":
 		err = u.Cmd.Start()
@@ -50,36 +62,33 @@ func (u *Unit) Start() {
 	default:
 		err = errors.New(u.Service.Type + " does not exist")
 	}
-
-	if err != nil {
-		u.Log(err.Error())
-	}
+	return
 }
 
 // Stops execution of the unit's specified command
-func (u *Unit) Stop() {
-	if err := u.Process.Kill(); err != nil {
-		u.Log(err.Error())
-	}
+func (u *Unit) Stop() (err error) {
+	return u.Process.Kill()
 }
 
-func (u *Unit) Active() unit.ActivationState {
-	return unit.Active // TODO: fixme
+func (u Unit) Active() state.Activation {
 	switch {
 	case u.Cmd == nil, u.ProcessState == nil:
-		return unit.Inactive
+		return state.Inactive
 	case u.ProcessState.Success():
 		switch u.Service.Type {
 		case "oneshot":
-			return unit.Active
+			return state.Active
 		case "simple":
-			return unit.Inactive
+			return state.Inactive
 		default:
-			return unit.Failed
+			return state.Failed
 		}
 	case u.ProcessState.Exited():
-		return unit.Failed
+		return state.Failed
 	default:
-		return unit.Active
+		return state.Inactive
 	}
+}
+func (u Unit) Sub() state.Sub {
+	return state.Unavailable
 }
