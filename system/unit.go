@@ -51,6 +51,7 @@ func (u *Unit) readyNotifier() {
 		<-u.rdy
 		for _, c := range u.listeners.ch {
 			c <- struct{}{}
+			close(c)
 		}
 		u.listeners.ch = []chan interface{}{}
 	}
@@ -69,7 +70,16 @@ func (u *Unit) waitFor() <-chan interface{} {
 }
 
 func (u *Unit) Log(v ...interface{}) {
-	u.log.Logger.Println(v)
+	str := ""
+	if len(v) > 0 {
+		str += v[0].(string)
+		v = v[1:]
+
+		for _, w := range v {
+			str += " " + w.(string)
+		}
+	}
+	u.log.Logger.Println(str)
 }
 func (u *Unit) SetOutput(w io.Writer) {
 	u.log.Logger.SetOutput(w)
