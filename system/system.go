@@ -62,7 +62,6 @@ func New(paths ...string) (s *System, err error) {
 func (s *System) Start(name string) (err error) {
 	var u *Unit
 	if u, err = s.unit(name); err == nil {
-		u.Log("added to the queue")
 		s.Queue.Add(u)
 	}
 	return

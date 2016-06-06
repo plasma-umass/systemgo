@@ -1,11 +1,14 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
-	"time"
+	"net/http"
 
 	"github.com/b1101/systemgo/lib/handle"
+	"github.com/b1101/systemgo/lib/systemctl"
 	"github.com/b1101/systemgo/system"
 )
 
@@ -38,12 +41,31 @@ func main() {
 	if err = sys.Start("sv.service"); err != nil {
 		handle.Err(err)
 	}
+	log.Fatalln(http.ListenAndServe(":28537", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 
-	time.Sleep(3 * time.Second)
+		body, err := ioutil.ReadAll(req.Body)
+		defer req.Body.Close()
+		if err != nil {
+			log.Println(err.Error())
+		}
+		var msg systemctl.Request
+		if err := json.Unmarshal(body, &msg); err != nil {
+			log.Println(err.Error())
+		}
+		switch msg.Cmd {
+		case "status":
+			for _, u := range msg.Units {
+				if st, err := sys.StatusOf(u); err != nil {
+					w.Write([]byte(err.Error()))
+				} else {
+					if b, err := json.Marshal(st); err != nil {
+						log.Println(err.Error())
+					} else {
+						w.Write(b)
+					}
+				}
+			}
 
-	st, _ = sys.StatusOf("dep.service")
-	fmt.Println(st)
-
-	st, _ = sys.StatusOf("sv.service")
-	fmt.Println(st)
+		}
+	})))
 }

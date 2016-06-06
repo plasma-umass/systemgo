@@ -21,15 +21,18 @@
 package cmd
 
 import (
+	"encoding/json"
+	"fmt"
 	"log"
 
+	"github.com/b1101/systemgo/lib/status"
 	"github.com/b1101/systemgo/lib/systemctl"
 	"github.com/spf13/cobra"
 )
 
-// startCmd represents the start command
-var startCmd = &cobra.Command{
-	Use:   "start",
+// statusCmd represents the status command
+var statusCmd = &cobra.Command{
+	Use:   "status",
 	Short: "A brief description of your command",
 	Long: `A longer description that spans multiple lines and likely contains examples
 and usage of using your command. For example:
@@ -38,26 +41,31 @@ Cobra is a CLI library for Go that empowers applications.
 This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		r := systemctl.NewRequest("start", args...)
+		r := systemctl.NewRequest("status", args...)
 		b, err := r.Send("http://127.0.0.1:28537/")
 		if err != nil {
 			log.Fatalln(err.Error())
 		}
-		log.Println(string(b))
+
+		var st status.Unit
+		if err = json.Unmarshal(b, &st); err != nil {
+			log.Fatalln(err.Error())
+		}
+		fmt.Println(st)
 	},
 }
 
 func init() {
-	RootCmd.AddCommand(startCmd)
+	RootCmd.AddCommand(statusCmd)
 
 	// Here you will define your flags and configuration settings.
 
 	// Cobra supports Persistent Flags which will work for this command
 	// and all subcommands, e.g.:
-	// startCmd.PersistentFlags().String("foo", "", "A help for foo")
+	// statusCmd.PersistentFlags().String("foo", "", "A help for foo")
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
-	// startCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	// statusCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 
 }
