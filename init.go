@@ -12,22 +12,31 @@ import (
 	"github.com/b1101/systemgo/system"
 )
 
-type Reloader interface {
-	Reload()
-}
+var sys *system.System
 
-var paths = []string{
-	// Gentoo-specific
-	//"/usr/lib/systemd/system",
-	// User overrides
-	//"/etc/systemd/system",
+var (
+	paths = []string{
+		// Gentoo-specific
+		//"/usr/lib/systemd/system",
+		// User overrides
+		//"/etc/systemd/system",
 
-	"test",
-}
+		"test",
+	}
+
+	handlers = map[string]func(s string) interface{}{
+		"status": func(s string) interface{} {
+			if st, err := sys.StatusOf(s); err != nil {
+				return err
+			} else {
+				return st
+			}
+		},
+	}
+)
 
 func main() {
 	var err error
-	var sys *system.System
 
 	if sys, err = system.New(paths...); err != nil {
 		log.Fatalln(err.Error())
@@ -52,20 +61,23 @@ func main() {
 		if err := json.Unmarshal(body, &msg); err != nil {
 			log.Println(err.Error())
 		}
-		switch msg.Cmd {
-		case "status":
-			for _, u := range msg.Units {
-				if st, err := sys.StatusOf(u); err != nil {
-					w.Write([]byte(err.Error()))
-				} else {
-					if b, err := json.Marshal(st); err != nil {
+		for cmd, handler := range handlers {
+			if msg.Cmd == cmd {
+				for _, u := range msg.Units {
+					x := handler(u)
+
+					b, err := json.Marshal(x)
+					if err != nil {
 						log.Println(err.Error())
-					} else {
-						w.Write(b)
+						continue
+					}
+
+					if _, err := w.Write(b); err != nil {
+						log.Println(err.Error())
 					}
 				}
+				break
 			}
-
 		}
 	})))
 }
