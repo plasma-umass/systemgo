@@ -14,6 +14,10 @@ import (
 
 var sys *system.System
 
+const (
+	host = "127.0.0.1:28537"
+)
+
 var (
 	paths = []string{
 		// Gentoo-specific
@@ -35,6 +39,52 @@ var (
 	}
 )
 
+func handleCtlRequests(w http.ResponseWriter, req *http.Request) {
+	body, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		log.Printf("ioutil.ReadAll(body): %s", err)
+		return
+	}
+	defer req.Body.Close()
+
+	var msg systemctl.Request
+	if err := json.Unmarshal(body, &msg); err != nil {
+		log.Printf("json.Unmarshal: %s", err)
+		return
+	}
+
+	handler, ok := handlers[msg.Cmd]
+	if !ok {
+		log.Printf("unhandled command request: %s", msg.Cmd)
+		return
+	}
+
+	handled := false
+
+	for _, u := range msg.Units {
+		result := handler(u)
+
+		resp, err := json.Marshal(result)
+		if err != nil {
+			log.Printf("json.Marshal(result): %s", err)
+			continue
+		}
+
+		if _, err := w.Write(resp); err != nil {
+			log.Printf("Write(resp): %s", err)
+		}
+
+		handled = true
+	}
+
+	if !handled {
+		// some messages work globally and don't specify units
+		// (like a bare `$ systemctl`), and others are
+		// potentially in error, forgetting to list a unit.
+		log.Printf("TODO: handle messages that don't specify units")
+	}
+}
+
 func main() {
 	var err error
 
@@ -50,34 +100,9 @@ func main() {
 	if err = sys.Start("sv.service"); err != nil {
 		handle.Err(err)
 	}
-	log.Fatalln(http.ListenAndServe(":28537", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 
-		body, err := ioutil.ReadAll(req.Body)
-		defer req.Body.Close()
-		if err != nil {
-			log.Println(err.Error())
-		}
-		var msg systemctl.Request
-		if err := json.Unmarshal(body, &msg); err != nil {
-			log.Println(err.Error())
-		}
-		for cmd, handler := range handlers {
-			if msg.Cmd == cmd {
-				for _, u := range msg.Units {
-					x := handler(u)
-
-					b, err := json.Marshal(x)
-					if err != nil {
-						log.Println(err.Error())
-						continue
-					}
-
-					if _, err := w.Write(b); err != nil {
-						log.Println(err.Error())
-					}
-				}
-				break
-			}
-		}
-	})))
+	err = http.ListenAndServe(host, http.HandlerFunc(handleCtlRequests))
+	if err != nil {
+		log.Fatalf("ListenAndServe: %s", err)
+	}
 }
