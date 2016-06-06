@@ -21,16 +21,20 @@ func NewQueue() (q *Queue) {
 		make(chan *Unit),
 	}
 	heap.Init(q)
+
+	// Adds a unit to the queue if 'add' channel is not empty
+	// Starts 'popping' units from the queue, if 'add' is empty
+	// Blocks until a unit is sent on 'add', if the queue is empty
 	go func() {
 		for {
+			if q.Len() == 0 {
+				heap.Push(q, <-q.add)
+			}
 			select {
 			case u := <-q.add:
 				heap.Push(q, u)
 			default:
-				for q.Len() > 0 {
-					q.Start <- heap.Pop(q).(*Unit)
-				}
-				heap.Push(q, <-q.add)
+				q.Start <- heap.Pop(q).(*Unit)
 			}
 		}
 	}()
@@ -91,7 +95,6 @@ func (q *Queue) Remove(u *Unit) {
 		for i, enqueued := range q.queue {
 			if enqueued == u {
 				heap.Remove(q, i)
-				heap.Fix(q, i)
 				delete(q.queued, u)
 				break
 			}
