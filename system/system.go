@@ -2,6 +2,7 @@ package system
 
 import (
 	"strings"
+	"time"
 
 	"github.com/b1101/systemgo/lib/errors"
 	"github.com/b1101/systemgo/lib/state"
@@ -29,6 +30,9 @@ type System struct {
 
 	// Paths, where the unit file specifications get searched for
 	Paths []string
+
+	// Starting time
+	Since time.Time
 }
 
 //var queue = make(chan *Unit)
@@ -45,6 +49,7 @@ type System struct {
 
 func New(paths ...string) (s *System, err error) {
 	s = &System{}
+	s.Since = time.Now()
 	s.Paths = paths
 	if s.Units, err = ParseAll(paths...); err != nil {
 		s.State = state.Degraded
@@ -135,7 +140,12 @@ func (s *System) Disable(name string) (err error) {
 //}
 
 func (s System) Status() (st status.System) {
-	return
+	return status.System{
+		State:  s.State,
+		Jobs:   s.Queue.Len(),
+		Failed: len(s.Failed),
+		Since:  s.Since,
+	}
 }
 
 func (s System) StatusOf(name string) (st status.Unit, err error) {

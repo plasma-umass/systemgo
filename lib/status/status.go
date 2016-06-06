@@ -45,25 +45,15 @@ type System struct {
 	CGroup CGroup `json:"CGroup,omitempty"`
 }
 
-type CGroup interface{} // TODO: WIP
+type CGroup struct{} // TODO: WIP
+
+func (c CGroup) String() string {
+	return "Not implemented yet"
+}
 
 ////
 //// TODO: move to Systemctl
 ////
-
-func (s Unit) String() (out string) {
-	out = fmt.Sprintf(
-		`Loaded: %s
-Active: %s`,
-		s.Load, s.Activation)
-	if len(s.Log) > 0 {
-		out += "\nLog:\n"
-		for _, line := range s.Log {
-			out += line + "\n"
-		}
-	}
-	return
-}
 
 //type failed int
 //
@@ -77,22 +67,38 @@ Active: %s`,
 //	return fmt.Sprintf("%v queued", int(j))
 //}
 //
-//func (s Unit) String() string {
-//	return fmt.Sprintf(`Loaded: %s
-//Active: %s`, s.Load, s.Activation)
-//}
-//
-//func (s Load) String() string {
-//	return fmt.Sprintf("%s (%s; %s; %s)",
-//		s.Loaded, s.Path, s.State, s.Vendor)
-//}
-//
-//func (s Vendor) String() string {
-//	return fmt.Sprintf("vendor preset: %s",
-//		s.State)
-//}
-//
-//func (s Activation) String() string {
-//	return fmt.Sprintf("%s (%s)",
-//		s.State, s.Sub)
-//}
+func (s Unit) String() string {
+	out := fmt.Sprintf(`Loaded: %s
+Active: %s`, s.Load, s.Activation)
+	if len(s.Log) > 0 {
+		out += "\nLog:\n"
+		for _, line := range s.Log {
+			out += line + "\n"
+		}
+	}
+	return out
+}
+
+func (s Load) String() string {
+	return fmt.Sprintf("%s (%s; %s; %s)",
+		s.Loaded, s.Path, s.State, s.Vendor)
+}
+
+func (s Vendor) String() string {
+	return fmt.Sprintf("vendor preset: %s",
+		s.State)
+}
+
+func (s Activation) String() string {
+	return fmt.Sprintf("%s (%s)",
+		s.State, s.Sub)
+}
+func (s System) String() string {
+	return fmt.Sprintf(
+		`State: %s
+Jobs: %v queued
+Failed: %v units
+Since: %s
+CGroup: %s`,
+		s.State, s.Jobs, s.Failed, s.Since, s.CGroup)
+}
