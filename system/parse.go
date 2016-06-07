@@ -5,7 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"regexp"
+	"strings"
 
 	"github.com/b1101/systemgo/lib/handle"
 	"github.com/b1101/systemgo/lib/state"
@@ -15,10 +15,10 @@ import (
 
 var (
 	constructors = map[string]func(io.Reader) (Supervisable, error){
-		"service": func(r io.Reader) (Supervisable, error) {
+		".service": func(r io.Reader) (Supervisable, error) {
 			return service.New(r)
 		},
-		"target": func(r io.Reader) (Supervisable, error) {
+		".target": func(r io.Reader) (Supervisable, error) {
 			return target.New(r)
 		},
 	}
@@ -32,7 +32,7 @@ func ParseAll(paths ...string) (map[string]*Unit, error) {
 			switch {
 			case _err != nil:
 				return _err
-			case fpath == path, finfo.IsDir() && !is("wants", fpath):
+			case fpath == path, finfo.IsDir() && !strings.HasSuffix(fpath, ".wants"):
 				return nil
 			}
 
@@ -90,22 +90,9 @@ func ParseAll(paths ...string) (map[string]*Unit, error) {
 // matchAndCreate determines the unit type by name, creates and returns a Supervisable of that type
 func matchAndCreate(name string, definition io.Reader) (Supervisable, error) {
 	for suffix, constructor := range constructors {
-		if is(suffix, name) {
+		if strings.HasSuffix(name, suffix) {
 			return constructor(definition)
 		}
 	}
 	return nil, errors.New(name + " does not match any known unit type")
-}
-
-// is checks if filename extension matches given type
-func is(typ, name string) bool {
-	switch match, err := regexp.MatchString(".*[.]"+typ, name); {
-	case err != nil:
-		handle.Err(err)
-		fallthrough
-	case !match:
-		return false
-	default:
-		return true
-	}
 }
