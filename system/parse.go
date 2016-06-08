@@ -49,7 +49,7 @@ func ParseAll(paths ...string) (map[string]*Unit, error) {
 
 			if sup, err := matchAndCreate(finfo.Name(), file); err != nil {
 				u.Log(err.Error())
-				u.stats.loaded = state.Error
+				u.stats.loaded = state.UnitError
 			} else {
 				u.Supervisable = sup
 			}

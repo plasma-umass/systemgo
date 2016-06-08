@@ -70,25 +70,22 @@ func (u *Unit) Stop() (err error) {
 	return u.Process.Kill()
 }
 
-func (u Unit) Active() state.Activation {
+func (u Unit) Active() state.Active {
 	switch {
 	case u.Cmd == nil, u.ProcessState == nil:
-		return state.Inactive
+		return state.UnitInactive
 	case u.ProcessState.Success():
 		switch u.Service.Type {
 		case "oneshot":
-			return state.Active
+			return state.UnitActive
 		case "simple":
-			return state.Inactive
+			return state.UnitInactive
 		default:
-			return state.Failed
+			return state.UnitFailed
 		}
 	case u.ProcessState.Exited():
-		return state.Failed
+		return state.UnitFailed
 	default:
-		return state.Inactive
+		return state.UnitInactive
 	}
-}
-func (u Unit) Sub() state.Sub {
-	return state.Unavailable
 }
