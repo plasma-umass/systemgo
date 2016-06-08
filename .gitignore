@@ -1,6 +1,7 @@
 /test/testfile
-/systemgo
-/systemctl/systemctl
-*~
+
+/bin
 *_string.go
+
+*~
 
