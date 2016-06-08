@@ -113,17 +113,10 @@ func (u Unit) Loaded() state.Load {
 //func (u Unit) Enabled() state.Enable {
 //return u.stats.enabled
 //}
-func (u Unit) Active() state.Activation {
+func (u Unit) Active() state.Active {
 	if u.Supervisable != nil {
 		return u.Supervisable.Active()
 	} else {
-		return state.Inactive
-	}
-}
-func (u Unit) Sub() state.Sub {
-	if u.Supervisable != nil {
-		return u.Supervisable.Sub()
-	} else {
-		return state.Unavailable
+		return state.UnitInactive
 	}
 }

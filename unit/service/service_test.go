@@ -6,6 +6,4 @@ import (
 )
 
 func TestUnit(t *testing.T) {
-	s := &Unit{}
-	log.Println(s.Sub())
 }

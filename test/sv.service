@@ -2,5 +2,8 @@
 Description=Test
 Requires=dep.service
 After=dep.service
+
 [Service]
+Type=oneshot
+RemainAfterExit=yes
 ExecStart=test/sv.sh

@@ -169,7 +169,7 @@ func (s System) StatusOf(name string) (st status.Unit, err error) {
 
 	return status.Unit{
 		status.Load{u.Path(), u.Loaded(), enabled, status.Vendor{vendor}},
-		status.Activation{u.Active(), u.Sub()},
+		status.Activation{u.Active(), 0},
 		log,
 	}, nil
 }
@@ -209,7 +209,7 @@ func (s System) IsEnabled(name string) (st state.Enable, err error) {
 	}
 	return
 }
-func (s System) IsActive(name string) (st state.Activation, err error) {
+func (s System) IsActive(name string) (st state.Active, err error) {
 	var u *Unit
 	if u, err = s.unit(name); err == nil {
 		st = u.Active()
@@ -226,11 +226,11 @@ func (s System) unit(name string) (u *Unit, err error) {
 }
 
 func isUp(u Supervisable) bool {
-	return u.Active() == state.Active
+	return u.Active() == state.UnitActive
 }
 
 func isLoading(u Supervisable) bool {
-	return u.Active() == state.Activating
+	return u.Active() == state.UnitActivating
 }
 
 func (s *System) queueStarter() {

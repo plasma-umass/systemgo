@@ -20,8 +20,8 @@ type Load struct {
 	Vendor Vendor       `json:"Vendor"`
 }
 type Activation struct {
-	State state.Activation `json:"State"`
-	Sub   state.Sub        `json:"Sub"`
+	State state.Active `json:"State"`
+	Sub   int          `json:"Sub"`
 }
 type Vendor struct {
 	State state.Enable `json:"State"`

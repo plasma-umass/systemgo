@@ -45,9 +45,6 @@ func (u *Unit) Stop() (err error) {
 	return
 }
 
-func (u Unit) Sub() state.Sub {
-	return state.Unavailable
-}
-func (u Unit) Active() state.Activation {
-	return state.Inactive
+func (u Unit) Active() state.Active {
+	return state.UnitInactive
 }

@@ -1,14 +1,83 @@
 package state
 
-// Activation status of a unit
-type Activation int
+// values in these packages correspond to the enums found in
+// src/basic/unit-name.h in the systemd library.
 
-//go:generate stringer -type=Activation
+// Activation status of a unit -- https://goo.gl/XHBVuC
+type Active int
+
+//go:generate stringer -type=Active
 const (
-	Inactive Activation = iota
-	Activating
-	Active
-	Failed // TODO: check
+	UnitActive Active = iota
+	UnitReloading
+	UnitInactive
+	UnitFailed
+	UnitActivating
+	UnitDeactivating
+)
+
+// Load status of a unit definition file -- https://goo.gl/NRBCVK
+type Load int
+
+//go:generate stringer -type=Load
+const (
+	UnitStub Load = iota
+	UnitLoaded
+	UnitNotFound
+	UnitError
+	UnitMerged
+	UnitMasked
+)
+
+// Status of service units -- https://goo.gl/eg9PS3
+type Service int
+
+//go:generate stringer -type=Service
+const (
+	ServiceDead Service = iota
+	ServiceStartPre
+	ServiceStart
+	ServiceStartPost
+	ServiceRunning
+	ServiceExited // not running anymore, but RemainAfterExit true for this unit
+	ServiceReload
+	ServiceStop
+	ServiceStopSigabrt // watchdog timeout
+	ServiceStopSigterm
+	ServiceStopSigkill
+	ServiceStopPost
+	ServiceFinalSigterm
+	ServiceFinalSigkill
+	ServiceFailed
+	ServiceAutoRestart
+)
+
+// Status of mount units -- https://goo.gl/vg6p7Q
+type Mount int
+
+//go:generate stringer -type=Mount
+const (
+	MountDead Mount = iota
+	MountMounting
+	MountMountingDone
+	MountMounted
+	MountRemounting
+	MountUnmounting
+	MountMountingSigterm
+	MountMountingSigkill
+	MountRemountingSigterm
+	MountRemountingSigkill
+	MountUnmountingSigterm
+	MountUnmountingSigkill
+	MountFailed
+)
+
+type System int
+
+//go:generate stringer -type=System
+const (
+	Something System = iota // TODO: find all possible states
+	Degraded
 )
 
 // Enable status of a unit
@@ -20,31 +89,4 @@ const (
 	Static
 	Indirect
 	Enabled
-)
-
-// Load status of a unit
-type Load int
-
-//go:generate stringer -type=Load
-const (
-	Loaded Load = iota
-	Error
-)
-
-type Sub int
-
-//go:generate stringer -type=Sub
-const (
-	Unavailable Sub = iota
-	Mounted
-	Mounting
-	// TODO: add all subs
-)
-
-type System int
-
-//go:generate stringer -type=System
-const (
-	Something System = iota // TODO: find all possible states
-	Degraded
 )

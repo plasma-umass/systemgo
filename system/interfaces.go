@@ -7,8 +7,7 @@ type Supervisable interface {
 
 	Description() string
 
-	Active() state.Activation
-	Sub() state.Sub
+	Active() state.Active
 
 	Wants() []string
 	Requires() []string

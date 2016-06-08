@@ -4,9 +4,9 @@ package state
 
 import "fmt"
 
-const _Load_name = "LoadedError"
+const _Load_name = "UnitStubUnitLoadedUnitNotFoundUnitErrorUnitMergedUnitMasked"
 
-var _Load_index = [...]uint8{0, 6, 11}
+var _Load_index = [...]uint8{0, 8, 18, 30, 39, 49, 59}
 
 func (i Load) String() string {
 	if i < 0 || i >= Load(len(_Load_index)-1) {
