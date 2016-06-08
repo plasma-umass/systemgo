@@ -6,7 +6,6 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/b1101/systemgo/lib/state"
 	"github.com/b1101/systemgo/unit"
 )
 
@@ -70,22 +69,22 @@ func (u *Unit) Stop() (err error) {
 	return u.Process.Kill()
 }
 
-func (u Unit) Active() state.Active {
+func (u Unit) Active() unit.Activation {
 	switch {
 	case u.Cmd == nil, u.ProcessState == nil:
-		return state.UnitInactive
+		return unit.Inactive
 	case u.ProcessState.Success():
 		switch u.Service.Type {
 		case "oneshot":
-			return state.UnitActive
+			return unit.Active
 		case "simple":
-			return state.UnitInactive
+			return unit.Inactive
 		default:
-			return state.UnitFailed
+			return unit.Failed
 		}
 	case u.ProcessState.Exited():
-		return state.UnitFailed
+		return unit.Failed
 	default:
-		return state.UnitInactive
+		return unit.Inactive
 	}
 }

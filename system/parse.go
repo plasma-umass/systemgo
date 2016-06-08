@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/b1101/systemgo/lib/handle"
-	"github.com/b1101/systemgo/lib/state"
+	"github.com/b1101/systemgo/unit"
 	"github.com/b1101/systemgo/unit/service"
 	"github.com/b1101/systemgo/unit/target"
 )
@@ -49,7 +49,7 @@ func ParseAll(paths ...string) (map[string]*Unit, error) {
 
 			if sup, err := matchAndCreate(finfo.Name(), file); err != nil {
 				u.Log(err.Error())
-				u.stats.loaded = state.UnitError
+				u.stats.loaded = unit.Error
 			} else {
 				u.Supervisable = sup
 			}

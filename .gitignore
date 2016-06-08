@@ -2,4 +2,5 @@
 /systemgo
 /systemctl/systemctl
 *~
+*_string.go
 

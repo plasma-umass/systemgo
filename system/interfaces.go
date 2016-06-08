@@ -1,13 +1,13 @@
 package system
 
-import "github.com/b1101/systemgo/lib/state"
+import "github.com/b1101/systemgo/unit"
 
 type Supervisable interface {
 	StartStopper
 
 	Description() string
 
-	Active() state.Active
+	Active() unit.Activation
 
 	Wants() []string
 	Requires() []string

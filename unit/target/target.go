@@ -3,7 +3,6 @@ package target
 import (
 	"io"
 
-	"github.com/b1101/systemgo/lib/state"
 	"github.com/b1101/systemgo/unit"
 )
 
@@ -45,6 +44,6 @@ func (u *Unit) Stop() (err error) {
 	return
 }
 
-func (u Unit) Active() state.Active {
-	return state.UnitInactive
+func (u Unit) Active() unit.Activation {
+	return unit.Inactive
 }

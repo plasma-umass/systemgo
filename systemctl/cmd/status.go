@@ -25,8 +25,8 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/b1101/systemgo/lib/status"
 	"github.com/b1101/systemgo/lib/systemctl"
+	"github.com/b1101/systemgo/unit"
 	"github.com/spf13/cobra"
 )
 
@@ -47,7 +47,7 @@ to quickly create a Cobra application.`,
 			log.Fatalln(err.Error())
 		}
 
-		var st status.Unit
+		var st unit.Status
 		if err = json.Unmarshal(b, &st); err != nil {
 			log.Fatalln(err.Error())
 		}

@@ -7,7 +7,7 @@ import (
 	"log"
 	"sync"
 
-	"github.com/b1101/systemgo/lib/state"
+	"github.com/b1101/systemgo/unit"
 )
 
 type Unit struct {
@@ -19,7 +19,7 @@ type Unit struct {
 
 	stats struct {
 		path   string
-		loaded state.Load
+		loaded unit.Load
 	}
 
 	listeners listeners
@@ -106,17 +106,17 @@ func (u Unit) Description() string {
 func (u Unit) Path() string {
 	return u.stats.path
 }
-func (u Unit) Loaded() state.Load {
+func (u Unit) Loaded() unit.Load {
 	return u.stats.loaded
 }
 
-//func (u Unit) Enabled() state.Enable {
+//func (u Unit) Enabled() unit.Enable {
 //return u.stats.enabled
 //}
-func (u Unit) Active() state.Active {
+func (u Unit) Active() unit.Activation {
 	if u.Supervisable != nil {
 		return u.Supervisable.Active()
 	} else {
-		return state.UnitInactive
+		return unit.Inactive
 	}
 }

@@ -5,8 +5,7 @@ import (
 	"time"
 
 	"github.com/b1101/systemgo/lib/errors"
-	"github.com/b1101/systemgo/lib/state"
-	"github.com/b1101/systemgo/lib/status"
+	"github.com/b1101/systemgo/unit"
 )
 
 type System struct {
@@ -23,7 +22,7 @@ type System struct {
 	Queue *Queue
 
 	// Status of global state
-	State state.System
+	State State
 
 	// Deal with concurrency
 	//sync.Mutex
@@ -52,7 +51,7 @@ func New(paths ...string) (s *System, err error) {
 	s.Since = time.Now()
 	s.Paths = paths
 	if s.Units, err = ParseAll(paths...); err != nil {
-		s.State = state.Degraded
+		s.State = Degraded
 	}
 	s.Queue = NewQueue()
 	go s.queueStarter()
@@ -125,7 +124,7 @@ func (s *System) Disable(name string) (err error) {
 
 //st.Load.State, _ = s.IsEnabled(name)
 
-//st.Load.Vendor.State = state.Enabled
+//st.Load.Vendor.State = unit.Enabled
 
 //out += fmt.Sprintf("%s - %s\n%s\n", u.Name(), u.Description(), st)
 
@@ -138,8 +137,8 @@ func (s *System) Disable(name string) (err error) {
 //return
 //}
 
-func (s System) Status() (st status.System) {
-	return status.System{
+func (s System) Status() (st Status) {
+	return Status{
 		State:  s.State,
 		Jobs:   s.Queue.Len(),
 		Failed: len(s.Failed),
@@ -147,18 +146,18 @@ func (s System) Status() (st status.System) {
 	}
 }
 
-func (s System) StatusOf(name string) (st status.Unit, err error) {
+func (s System) StatusOf(name string) (st unit.Status, err error) {
 	var u *Unit
 	if u, err = s.unit(name); err != nil {
 		return
 	}
 
-	var enabled state.Enable
-	var vendor state.Enable
+	//var enabled unit.Enable
+	//var vendor unit.Enable
 
-	if s.Enabled[u] {
-		enabled = state.Enabled
-	}
+	//if s.Enabled[u] {
+	//enabled = unit.Enabled
+	//}
 
 	var log []string
 	b := make([]byte, 10000)
@@ -167,10 +166,10 @@ func (s System) StatusOf(name string) (st status.Unit, err error) {
 		log = strings.Split(string(b[:n]), "\n")
 	}
 
-	return status.Unit{
-		status.Load{u.Path(), u.Loaded(), enabled, status.Vendor{vendor}},
-		status.Activation{u.Active(), 0},
-		log,
+	return unit.Status{
+		//	status.Load{u.Path(), u.Loaded(), enabled, status.Vendor{vendor}},
+		//	status.Activation{u.Active(), 0},
+		Log: log,
 	}, nil
 }
 
@@ -179,7 +178,7 @@ func (s System) StatusOf(name string) (st status.Unit, err error) {
 //return 0, errors.WIP
 //}
 //for _, name := range names {
-//var s status.Unit
+//var s unit.Status
 //if s, err = s.StatusOf(name); err != nil {
 //return
 //}
@@ -196,20 +195,20 @@ func (s System) StatusOf(name string) (st status.Unit, err error) {
 //if len(names) == 0 {
 //return 0, errors.WIP // TODO: Too few arguments
 //}
-//var st state.Enable
+//var st unit.Enable
 //if st, err = s.IsEnabled(name); err != nil {
 //return
 //}
 //}
 
-func (s System) IsEnabled(name string) (st state.Enable, err error) {
+func (s System) IsEnabled(name string) (st unit.Enable, err error) {
 	var u *Unit
 	if u, err = s.unit(name); err == nil && s.Enabled[u] {
-		st = state.Enabled
+		st = unit.Enabled
 	}
 	return
 }
-func (s System) IsActive(name string) (st state.Active, err error) {
+func (s System) IsActive(name string) (st unit.Activation, err error) {
 	var u *Unit
 	if u, err = s.unit(name); err == nil {
 		st = u.Active()
@@ -226,11 +225,11 @@ func (s System) unit(name string) (u *Unit, err error) {
 }
 
 func isUp(u Supervisable) bool {
-	return u.Active() == state.UnitActive
+	return u.Active() == unit.Active
 }
 
 func isLoading(u Supervisable) bool {
-	return u.Active() == state.UnitActivating
+	return u.Active() == unit.Activating
 }
 
 func (s *System) queueStarter() {
