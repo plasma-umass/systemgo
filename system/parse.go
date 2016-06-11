@@ -1,6 +1,7 @@
 package system
 
 import (
+	"bytes"
 	"errors"
 	"io"
 	"os"
@@ -36,19 +37,20 @@ func ParseAll(paths ...string) (map[string]*Unit, error) {
 				return nil
 			}
 
-			u := NewUnit()
+			var b bytes.Buffer
+			u := NewUnit(&b) // TODO: use config
 			u.name = finfo.Name()
 			units[finfo.Name()] = u
 
 			file, err := os.Open(fpath)
 			defer file.Close()
 			if err != nil {
-				u.Log(err.Error())
+				u.Log.Println(err.Error())
 				return nil
 			}
 
 			if sup, err := matchAndCreate(finfo.Name(), file); err != nil {
-				u.Log(err.Error())
+				u.Log.Println(err.Error())
 				u.stats.loaded = unit.Error
 			} else {
 				u.Supervisable = sup

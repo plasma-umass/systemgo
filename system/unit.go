@@ -1,10 +1,7 @@
 package system
 
 import (
-	"bytes"
-	"errors"
 	"io"
-	"log"
 	"sync"
 
 	"github.com/b1101/systemgo/unit"
@@ -13,7 +10,7 @@ import (
 type Unit struct {
 	Supervisable
 
-	log UnitLog
+	Log *Log
 
 	name string
 
@@ -31,19 +28,14 @@ type listeners struct {
 	sync.Mutex
 }
 
-type UnitLog struct { // WIP
-	*log.Logger
-	out io.Writer
-}
-
-func NewUnit() (u *Unit) {
-	var b bytes.Buffer
-	u = &Unit{}
-	u.log.Logger = log.New(&b, "", log.LstdFlags)
-	u.log.out = &b
-	u.rdy = make(chan interface{})
-	go u.readyNotifier()
-	return
+func NewUnit(output io.Writer) (u *Unit) { // TODO: more descriptive param name?
+	defer func() {
+		go u.readyNotifier()
+	}()
+	return &Unit{
+		Log: NewLog(output),
+		rdy: make(chan interface{}),
+	}
 }
 
 func (u *Unit) readyNotifier() {
@@ -69,28 +61,25 @@ func (u *Unit) waitFor() <-chan interface{} {
 	return c
 }
 
-func (u *Unit) Log(v ...interface{}) {
-	str := ""
-	if len(v) > 0 {
-		str += v[0].(string)
-		v = v[1:]
+//func (u *Unit) Log(v ...interface{}) {
+//str := ""
+//if len(v) > 0 {
+//str += v[0].(string)
+//v = v[1:]
 
-		for _, w := range v {
-			str += " " + w.(string)
-		}
-	}
-	u.log.Logger.Println(str)
-}
-func (u *Unit) SetOutput(w io.Writer) {
-	u.log.Logger.SetOutput(w)
-}
+//for _, w := range v {
+//str += " " + w.(string)
+//}
+//}
+//u.log.Logger.Println(str)
+//}
 
-func (u Unit) Read(b []byte) (int, error) {
-	if reader, ok := u.log.out.(io.Reader); ok {
-		return reader.Read(b)
-	}
-	return 0, errors.New("unreadable")
-}
+//func (u *Unit) Read(b []byte) (int, error) {
+//if reader, ok := u.log.out.(io.Reader); ok {
+//return reader.Read(b)
+//}
+//return 0, errors.New("unreadable")
+//}
 
 func (u Unit) Name() string {
 	return u.name

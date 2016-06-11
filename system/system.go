@@ -1,7 +1,6 @@
 package system
 
 import (
-	"strings"
 	"time"
 
 	"github.com/b1101/systemgo/lib/errors"
@@ -159,18 +158,18 @@ func (s System) StatusOf(name string) (st unit.Status, err error) {
 	//enabled = unit.Enabled
 	//}
 
-	var log []string
-	b := make([]byte, 10000)
+	st.Load.Path = u.Path()
+	st.Load.Loaded = u.Loaded()
+	st.Load.State = unit.Enabled
+	st.Activation.State = u.Active()
+	st.Activation.Sub = u.Sub()
 
-	if n, err := u.Read(b); err == nil && n > 0 {
-		log = strings.Split(string(b[:n]), "\n")
+	b := make([]byte, 10000)
+	if n, err := u.Log.Read(b); err == nil && n > 0 {
+		st.Log = u.Log.Contents
 	}
 
-	return unit.Status{
-		//	status.Load{u.Path(), u.Loaded(), enabled, status.Vendor{vendor}},
-		//	status.Activation{u.Active(), 0},
-		Log: log,
-	}, nil
+	return
 }
 
 //func (s System) WriteStatus(w io.Writer, names ...string) (n int64, err error) {
@@ -235,40 +234,40 @@ func isLoading(u Supervisable) bool {
 func (s *System) queueStarter() {
 	for u := range s.Queue.Start {
 		go func(u *Unit) {
-			u.Log("Starting", u.Name())
+			u.Log.Println("Starting", u.Name())
 
-			u.Log("Checking Conflicts...", u.Name())
+			u.Log.Println("Checking Conflicts...", u.Name())
 			for _, name := range u.Conflicts() {
 				if dep, _ := s.unit(name); dep != nil && isUp(dep) {
-					u.Log("Unit conflicts with", name)
+					u.Log.Println("Unit conflicts with", name)
 					return
 				}
 			}
 
-			u.Log("Checking Requires...", u.Name())
+			u.Log.Println("Checking Requires...", u.Name())
 			for _, name := range u.Requires() {
 				if dep, err := s.unit(name); err != nil {
-					u.Log(name, err.Error())
+					u.Log.Println(name, err.Error())
 					return
 				} else if !isUp(dep) && !isLoading(dep) {
 					s.Queue.Add(dep)
 				}
 			}
 
-			u.Log("Checking After...", u.Name())
+			u.Log.Println("Checking After...", u.Name())
 			for _, name := range u.After() {
-				u.Log("after", name)
+				u.Log.Println("after", name)
 				if dep, err := s.unit(name); err != nil {
-					u.Log(name, err.Error())
+					u.Log.Println(name, err.Error())
 					return
 				} else if !isUp(dep) {
-					u.Log("Waiting for", dep.Name(), "to start")
+					u.Log.Println("Waiting for", dep.Name(), "to start")
 					<-dep.waitFor()
-					u.Log(dep.Name(), "started")
+					u.Log.Println(dep.Name(), "started")
 				}
 			}
 
-			u.Log("Checking Requires again...", u.Name())
+			u.Log.Println("Checking Requires again...", u.Name())
 			for _, name := range u.Requires() {
 				if dep, _ := s.unit(name); !isUp(dep) {
 					return
@@ -276,10 +275,10 @@ func (s *System) queueStarter() {
 			}
 
 			if err := u.Start(); err != nil {
-				u.Log(err.Error())
+				u.Log.Println(err.Error())
 			}
 
-			u.Log("Started")
+			u.Log.Println("Started")
 			u.ready()
 		}(u)
 	}
