@@ -8,6 +8,7 @@ type Supervisable interface {
 	Description() string
 
 	Active() unit.Activation
+	Sub() string
 
 	Wants() []string
 	Requires() []string

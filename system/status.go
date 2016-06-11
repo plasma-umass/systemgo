@@ -5,7 +5,7 @@ import "time"
 // System status
 type Status struct {
 	// State of the system
-	State State `json:"State"`
+	State State `json:"State,string"`
 
 	// Number of queued jobs in-total
 	Jobs int `json:"Jobs"`

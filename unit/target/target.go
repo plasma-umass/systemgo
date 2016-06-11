@@ -1,6 +1,7 @@
 package target
 
 import (
+	"fmt"
 	"io"
 
 	"github.com/b1101/systemgo/unit"
@@ -46,4 +47,8 @@ func (u *Unit) Stop() (err error) {
 
 func (u Unit) Active() unit.Activation {
 	return unit.Inactive
+}
+
+func (u Unit) Sub() string {
+	return fmt.Sprint(unit.Inactive)
 }

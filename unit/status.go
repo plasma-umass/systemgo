@@ -12,7 +12,7 @@ type Status struct {
 
 	Activation struct {
 		State Activation `json:"State"`
-		Sub   int        `json:"Sub"`
+		Sub   string     `json:"Sub"`
 	} `json:"Activation"`
 
 	Log []string `json:"Log,omitempty"`
