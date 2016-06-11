@@ -24,9 +24,12 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/b1101/systemgo/lib/systemctl"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
+
+var sys systemctl.Client
 
 var cfgFile string
 
@@ -40,9 +43,9 @@ examples and usage of using your application. For example:
 Cobra is a CLI library for Go that empowers applications.
 This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
-// Uncomment the following line if your bare application
-// has an action associated with it:
-//	Run: func(cmd *cobra.Command, args []string) { },
+	// Uncomment the following line if your bare application
+	// has an action associated with it:
+	//	Run: func(cmd *cobra.Command, args []string) { },
 }
 
 // Execute adds all child commands to the root command sets flags appropriately.
@@ -65,6 +68,9 @@ func init() {
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
 	RootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+
+	// Initialize a new systemctl client
+	sys = systemctl.NewHttpClient("http://127.0.0.1:28537/")
 }
 
 // initConfig reads in config file and ENV variables if set.
@@ -74,8 +80,8 @@ func initConfig() {
 	}
 
 	viper.SetConfigName(".systemctl") // name of config file (without extension)
-	viper.AddConfigPath("$HOME")  // adding home directory as first search path
-	viper.AutomaticEnv()          // read in environment variables that match
+	viper.AddConfigPath("$HOME")      // adding home directory as first search path
+	viper.AutomaticEnv()              // read in environment variables that match
 
 	// If a config file is found, read it in.
 	if err := viper.ReadInConfig(); err == nil {

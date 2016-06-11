@@ -21,11 +21,9 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 
-	"github.com/b1101/systemgo/lib/systemctl"
 	"github.com/b1101/systemgo/unit"
 	"github.com/spf13/cobra"
 )
@@ -41,17 +39,16 @@ Cobra is a CLI library for Go that empowers applications.
 This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		r := systemctl.NewRequest("status", args...)
-		b, err := r.Send("http://127.0.0.1:28537/")
+		yield, err := sys.Get("status", args...)
 		if err != nil {
 			log.Fatalln(err.Error())
 		}
 
-		var st unit.Status
-		if err = json.Unmarshal(b, &st); err != nil {
-			log.Fatalln(err.Error())
+		for yield.More() {
+			var st unit.Status
+			yield.Decode(&st)
+			fmt.Println(st)
 		}
-		fmt.Println(st)
 	},
 }
 

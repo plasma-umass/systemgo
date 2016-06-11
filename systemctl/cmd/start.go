@@ -23,7 +23,6 @@ package cmd
 import (
 	"log"
 
-	"github.com/b1101/systemgo/lib/systemctl"
 	"github.com/spf13/cobra"
 )
 
@@ -38,12 +37,9 @@ Cobra is a CLI library for Go that empowers applications.
 This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		r := systemctl.NewRequest("start", args...)
-		b, err := r.Send("http://127.0.0.1:28537/")
-		if err != nil {
+		if err := sys.Do("start", args...); err != nil {
 			log.Fatalln(err.Error())
 		}
-		log.Println(string(b))
 	},
 }
 
