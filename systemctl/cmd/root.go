@@ -22,9 +22,11 @@ package cmd
 
 import (
 	"fmt"
+	"log"
 	"os"
 
 	"github.com/b1101/systemgo/lib/systemctl"
+	"github.com/b1101/systemgo/system"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -36,16 +38,20 @@ var cfgFile string
 // RootCmd represents the base command when called without any subcommands
 var RootCmd = &cobra.Command{
 	Use:   "systemctl",
-	Short: "A brief description of your application",
-	Long: `A longer description that spans multiple lines and likely contains
-examples and usage of using your application. For example:
+	Short: "Query or send control commands to the systemgo manager",
+	Long:  `TODO: add description`,
+	Run: func(cmd *cobra.Command, args []string) {
+		yield, err := sys.Get("status")
+		if err != nil {
+			log.Fatalln(err.Error())
+		}
 
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
-	// Uncomment the following line if your bare application
-	// has an action associated with it:
-	//	Run: func(cmd *cobra.Command, args []string) { },
+		for yield.More() {
+			var st system.Status
+			yield.Decode(&st)
+			fmt.Println(st)
+		}
+	},
 }
 
 // Execute adds all child commands to the root command sets flags appropriately.
@@ -70,7 +76,7 @@ func init() {
 	RootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 
 	// Initialize a new systemctl client
-	sys = systemctl.NewHttpClient("http://127.0.0.1:28537/")
+	sys = systemctl.NewHttpClient("http://127.0.0.1:28537/") // TODO: use config
 }
 
 // initConfig reads in config file and ENV variables if set.
