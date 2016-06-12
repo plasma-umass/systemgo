@@ -9,12 +9,15 @@ import (
 
 type Response struct {
 	Error string
-	Yield json.RawMessage
+	Yield interface{}
 }
 
 // Splits the system response into yield and error(if any)
 func Parse(response io.Reader) (yield json.RawMessage, err error) {
-	var resp Response
+	var resp struct {
+		Response
+		Yield json.RawMessage
+	}
 	if err = json.NewDecoder(response).Decode(&resp); err != nil {
 		return
 	}
