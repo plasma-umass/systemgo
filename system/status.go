@@ -35,34 +35,6 @@ func (c CGroup) String() string {
 //	"text/tabwriter"
 //)
 //
-//func (s UnitStatus) String() (out string) {
-//	out = fmt.Sprintf(
-//		`Loaded: %s
-//Active: %s`,
-//		s.Load, s.Activation)
-//
-//	b := make([]byte, 1000)
-//	if n, _ := u.Read(b); n > 0 {
-//		out += fmt.Sprintf("\nLog:\n%s\n", b)
-//	}
-//
-//	return
-//}
-//
-//func (s LoadStatus) String() string {
-//	return fmt.Sprintf("%s (%s; %s; %s)",
-//		s.Loaded, s.Path, s.State, s.Vendor)
-//}
-//
-//func (s VendorStatus) String() string {
-//	return fmt.Sprintf("vendor preset: %s",
-//		s.State)
-//}
-//
-//func (s ActivationStatus) String() string {
-//	return fmt.Sprintf("%s (%s)",
-//		s.State, s.Sub)
-//}
 //
 //func (s SystemStatus) WriteTo(out io.Writer) {
 //	tabWriteln(out, s)

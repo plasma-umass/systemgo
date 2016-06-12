@@ -1,7 +1,6 @@
 package system
 
 import (
-	"fmt"
 	"io/ioutil"
 	"time"
 
@@ -166,12 +165,7 @@ func (s System) StatusOf(name string) (st unit.Status, err error) {
 	st.Activation.State = u.Active()
 	st.Activation.Sub = u.Sub()
 
-	var b []byte
-	if b, err = ioutil.ReadAll(u.Log); err != nil {
-		return
-	}
-	fmt.Println(u.Log.contents.Buffer)
-	fmt.Println(string(b))
+	st.Log, err = ioutil.ReadAll(u.Log)
 	//st.Log = strings.Split(u.Log)
 	//b := make([]byte, 10000)
 	//if n, err := u.Log.Read(b); err == nil && n > 0 {
