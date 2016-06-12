@@ -1,22 +1,26 @@
 package system
 
 import (
+	"bytes"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
-	"strings"
 )
 
 type Log struct {
 	*log.Logger
-	out io.Writer
-	contents
+	out      io.Writer
+	contents contents
 }
 
 func NewLog(w io.Writer) *Log {
 	return &Log{
 		Logger: log.New(w, "", log.LstdFlags),
 		out:    w,
+		contents: contents{
+			Buffer: bytes.NewBuffer(make([]byte, 0, 10000)),
+		},
 	}
 }
 
@@ -32,65 +36,58 @@ func (l *Log) Read(b []byte) (n int, err error) {
 		return 0, fmt.Errorf("Cannot read from %T", l.out)
 	}
 
-	if n, err = reader.Read(b); err != nil && err != io.EOF {
+	if _, err = l.contents.ReadFrom(reader); err != nil {
 		return
 	}
 
-	if err = func() error {
-		nWr, errWr := l.contents.Write(b)
-		if errWr == nil && nWr != n {
-			return fmt.Errorf("Byte count mismatch: %v read, %v written", n, nWr)
-		}
-		return errWr
-	}(); err != nil {
-		err = fmt.Errorf("Error writing contents: %v", err)
-	}
-
-	return
+	return l.contents.Read(b)
 }
 
 type contents struct {
-	Contents  []string
-	byteCount int
+	*bytes.Buffer
+	io.Reader
 }
 
-func (c contents) Len() int {
-	return c.byteCount
+func (c *contents) Read(b []byte) (n int, err error) {
+	if c.Reader == nil {
+		c.Reader = bytes.NewReader(c.Buffer.Bytes())
+	}
+	defer func() {
+		if err == io.EOF {
+			c.Reader = nil
+		}
+	}()
+	return c.Reader.Read(b)
+}
+
+func (c *contents) ReadFrom(r io.Reader) (n int64, err error) {
+	var b []byte
+	if b, err = ioutil.ReadAll(r); err != nil {
+		return
+	}
+	_, err = c.Write(b)
+	return int64(len(b)), err
 }
 
 func (c *contents) Write(b []byte) (n int, err error) {
-	data := strings.Split(string(b), "\n")
+	if c.Len()+len(b) <= c.Cap() {
+		return c.Buffer.Write(b)
+	}
 
 	defer func() {
-		c.byteCount += n
+		if err == nil {
+			_, err = c.Buffer.ReadString('\n')
+		}
 	}()
-	countBytes := func(arr []string) int {
-		var n int
-		for _, str := range arr {
-			n += len(str)
-		}
-		return n - 1
+
+	if len(b) >= c.Cap() {
+		c.Buffer.Reset()
+		return c.Buffer.Write(b[len(b)-c.Cap():])
 	}
 
-	switch {
-	case len(data) == 0:
-		return 0, fmt.Errorf("Empty array received")
-	case len(c.Contents)+len(data) <= cap(c.Contents):
-		c.Contents = append(c.Contents, data...)
-		return len(b), nil
-	case len(data) >= cap(c.Contents):
-		c.byteCount = 0
-		c.Contents = data[len(data)-cap(c.Contents):]
-		return countBytes(c.Contents), fmt.Errorf("Length of data exceeds capacity: %v > %v", len(data), cap(c.Contents))
-	default:
-		var offset int
-		if offset = cap(c.Contents) - len(data); offset < 0 {
-			offset = 0
-		}
-
-		c.byteCount = countBytes(c.Contents[offset:])
-
-		c.Contents = append(c.Contents[offset:], data...)
-		return len(b), nil
+	if _, err = c.Buffer.Read(make([]byte, len(b)+c.Len()-c.Cap())); err != nil {
+		return 0, err
 	}
+
+	return c.Buffer.Write(b)
 }

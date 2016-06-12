@@ -1,6 +1,8 @@
 package system
 
 import (
+	"fmt"
+	"io/ioutil"
 	"time"
 
 	"github.com/b1101/systemgo/lib/errors"
@@ -164,10 +166,17 @@ func (s System) StatusOf(name string) (st unit.Status, err error) {
 	st.Activation.State = u.Active()
 	st.Activation.Sub = u.Sub()
 
-	b := make([]byte, 10000)
-	if n, err := u.Log.Read(b); err == nil && n > 0 {
-		st.Log = u.Log.Contents
+	var b []byte
+	if b, err = ioutil.ReadAll(u.Log); err != nil {
+		return
 	}
+	fmt.Println(u.Log.contents.Buffer)
+	fmt.Println(string(b))
+	//st.Log = strings.Split(u.Log)
+	//b := make([]byte, 10000)
+	//if n, err := u.Log.Read(b); err == nil && n > 0 {
+	//st.Log = u.Log.Contents
+	//}
 
 	return
 }
