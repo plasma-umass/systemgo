@@ -8,8 +8,8 @@ import (
 )
 
 type Response struct {
-	Error string
 	Yield interface{}
+	Error string
 }
 
 // Splits the system response into yield and error(if any)

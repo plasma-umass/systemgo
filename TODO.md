@@ -4,3 +4,5 @@
 - [ ] Target units
 - [ ] Queue refactoring
 - [ ] Modify constants to better match Systemd
+- [ ] Make Systemgo run on Browsix
+- [ ] Allow for way of communicating with init other than HTTP

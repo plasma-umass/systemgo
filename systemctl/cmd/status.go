@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/b1101/systemgo/system"
 	"github.com/b1101/systemgo/unit"
 	"github.com/spf13/cobra"
 )
@@ -39,10 +40,20 @@ var statusCmd = &cobra.Command{
 			log.Fatalln(err.Error())
 		}
 
+		if len(args) == 0 {
+			var v system.Status
+
+			yield.Decode(&v)
+			fmt.Println(v)
+
+			return
+		}
+
+		var v unit.Status
+
 		for yield.More() {
-			var st unit.Status
-			yield.Decode(&st)
-			fmt.Println(st)
+			yield.Decode(&v)
+			fmt.Println(v)
 		}
 	},
 }

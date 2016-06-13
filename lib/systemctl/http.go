@@ -54,7 +54,7 @@ func (c *HttpClient) Do(cmd string, units ...string) (err error) {
 
 func getHTTP(addr, cmd string, units ...string) (*http.Response, error) {
 	if len(units) == 0 {
-		return http.Get(addr + "/" + cmd + "/")
+		return http.Get(addr + "/" + cmd)
 	} else {
 		v := url.Values{}
 		for _, unit := range units {
