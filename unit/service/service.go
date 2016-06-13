@@ -2,7 +2,6 @@ package service
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"os/exec"
 	"strings"
@@ -91,5 +90,6 @@ func (u Unit) Active() unit.Activation {
 }
 
 func (u Unit) Sub() string {
-	return fmt.Sprint(Dead) // TODO: fix
+	//return fmt.Sprint(Dead) // TODO: fix
+	return "TODO: implement"
 }

@@ -1,7 +1,6 @@
 package target
 
 import (
-	"fmt"
 	"io"
 
 	"github.com/b1101/systemgo/unit"
@@ -50,5 +49,5 @@ func (u Unit) Active() unit.Activation {
 }
 
 func (u Unit) Sub() string {
-	return fmt.Sprint(unit.Inactive)
+	return "TODO: implement"
 }
