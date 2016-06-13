@@ -3,19 +3,20 @@ package unit
 import "fmt"
 
 type Status struct {
-	Load struct {
-		Path   string `json:"Path"`
-		Loaded Load   `json:"Loaded"`
-		State  Enable `json:"Enabled"`
-		Vendor Enable `json:"Vendor"`
-	} `json:"Load"`
-
-	Activation struct {
-		State Activation `json:"State"`
-		Sub   string     `json:"Sub"`
-	} `json:"Activation"`
+	Load       LoadStatus       `json:"Load"`
+	Activation ActivationStatus `json:"Activation"`
 
 	Log []byte `json:"Log,omitempty"`
+}
+type ActivationStatus struct {
+	State Activation `json:"State"`
+	Sub   string     `json:"Sub"`
+}
+type LoadStatus struct {
+	Path   string `json:"Path"`
+	Loaded Load   `json:"Loaded"`
+	State  Enable `json:"Enabled"`
+	Vendor Enable `json:"Vendor"`
 }
 
 func (s Status) String() (out string) {

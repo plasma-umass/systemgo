@@ -1,6 +1,9 @@
 package system
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // System status
 type Status struct {
@@ -18,6 +21,9 @@ type Status struct {
 
 	// CGroup
 	CGroup CGroup `json:"CGroup,omitempty"`
+
+	// Log
+	Log []byte `json:"Log, omitempty"`
 }
 
 type CGroup struct{} // TODO: WIP
@@ -113,12 +119,17 @@ func (c CGroup) String() string {
 //return fmt.Sprintf("%s (%s)",
 //s.State, s.Sub)
 //}
-//func (s System) String() string {
-//return fmt.Sprintf(
-//`State: %s
-//Jobs: %v queued
-//Failed: %v units
-//Since: %s
-//CGroup: %s`,
-//s.State, s.Jobs, s.Failed, s.Since, s.CGroup)
-//}
+func (s Status) String() (out string) {
+	defer func() {
+		if len(s.Log) > 0 {
+			out += fmt.Sprintf("\nLog:\n%s\n", s.Log)
+		}
+	}()
+	return fmt.Sprintf(
+		`State: %s
+Jobs: %v queued
+Failed: %v units
+Since: %s
+CGroup: %s`,
+		s.State, s.Jobs, s.Failed, s.Since, s.CGroup)
+}
