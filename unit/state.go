@@ -8,9 +8,9 @@ type Activation int
 
 //go:generate stringer -type=Activation
 const (
-	Active Activation = iota
+	Inactive Activation = iota
+	Active
 	Reloading
-	Inactive
 	Failed
 	Activating
 	Deactivating

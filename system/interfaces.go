@@ -7,9 +7,6 @@ type Supervisable interface {
 
 	Description() string
 
-	Active() unit.Activation
-	Sub() string
-
 	Wants() []string
 	Requires() []string
 	Conflicts() []string
@@ -29,4 +26,8 @@ type Starter interface {
 }
 type Stopper interface {
 	Stop() error
+}
+type Subber interface {
+	Active() unit.Activation
+	Sub() string
 }

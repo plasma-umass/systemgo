@@ -22,7 +22,7 @@ type LoadStatus struct {
 func (s Status) String() (out string) {
 	defer func() {
 		if len(s.Log) > 0 {
-			out += fmt.Sprintf("\nLog:\n%s\n", s.Log)
+			out += fmt.Sprintf("\nLog:\n%s", s.Log)
 		}
 	}()
 	return fmt.Sprintf(
