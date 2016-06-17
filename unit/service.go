@@ -1,12 +1,10 @@
 // Package service defines a service unit type
-package service
+package unit
 
 import (
 	"io"
 	"os/exec"
 	"strings"
-
-	"github.com/b1101/systemgo/unit"
 )
 
 const DEFAULT_SERVICE_TYPE = "simple"
@@ -21,14 +19,14 @@ var supportedTypes = map[string]bool{
 }
 
 // Service unit
-type Unit struct {
-	Definition
+type Service struct {
+	serviceDefinition
 	*exec.Cmd
 }
 
 // Service unit definition
-type Definition struct {
-	unit.Definition
+type serviceDefinition struct {
+	definition
 	Service struct {
 		Type                            string
 		ExecStart, ExecStop, ExecReload string
@@ -40,76 +38,76 @@ type Definition struct {
 }
 
 // Parses the definition, checks for errors and returns a new service
-func New(definition io.Reader) (service *Unit, err error) {
-	service = &Unit{}
+func NewService(definition io.Reader) (service *Service, err error) {
+	service = &Service{}
 
 	// Set defaults
-	service.Definition.Service.Type = "simple"
+	service.serviceDefinition.Service.Type = "simple"
 
-	if err = unit.ParseDefinition(definition, &service.Definition); err != nil {
+	if err = parseDefinition(definition, &service.serviceDefinition); err != nil {
 		return
 	}
 
 	// Check definition for errors
-	switch def := service.Definition; {
+	switch def := service.serviceDefinition; {
 	case def.Service.ExecStart == "":
-		err = unit.ParseErr("ExecStart", unit.ErrNotSet)
+		err = ParseErr("ExecStart", ErrNotSet)
 	case !supportedTypes[def.Service.Type]:
 		var terr error
 		if _, ok := supportedTypes[def.Service.Type]; !ok {
-			terr = unit.ErrNotExist
+			terr = ErrNotExist
 		} else {
-			terr = unit.ErrNotSupported
+			terr = ErrNotSupported
 		}
-		err = unit.ParseErr("Type", unit.ParseErr(def.Service.Type, terr))
+		err = ParseErr("Type", ParseErr(def.Service.Type, terr))
 	default:
-		cmd := strings.Split(def.Service.ExecStart, " ")
+		cmd := strings.Fields(def.Service.ExecStart)
 		service.Cmd = exec.Command(cmd[0], cmd[1:]...)
 	}
 	return
 }
 
 // Start executes the command specified in service definition
-func (u *Unit) Start() (err error) {
+func (u *Service) Start() (err error) {
 	switch u.Service.Type {
 	case "simple":
 		err = u.Cmd.Start()
 	case "oneshot":
 		err = u.Cmd.Run()
 	default:
-		err = unit.ErrNotSupported
+		err = ErrNotSupported
 	}
 	return
 }
 
 // Stop stops execution of the command specified in service definition
-func (u *Unit) Stop() (err error) {
+func (u *Service) Stop() (err error) {
 	return u.Process.Kill()
 }
 
 // Active reports activation status of a service
-func (u Unit) Active() unit.Activation {
+func (u Service) Active() Activation {
 	switch {
 	case u.Cmd == nil, u.ProcessState == nil:
-		return unit.Inactive
+		return Inactive
 	case u.ProcessState.Success():
 		switch u.Service.Type {
 		case "oneshot":
-			return unit.Active
+			return Active
 		case "simple":
-			return unit.Inactive
+			return Inactive
 		default:
-			return unit.Failed
+			return Failed
 		}
 	case u.ProcessState.Exited():
-		return unit.Failed
+		return Failed
 	default:
-		return unit.Inactive
+		return Inactive
 	}
 }
 
 // Sub reports the sub status of a service
-func (u Unit) Sub() string {
+func (u Service) Sub() string {
 	//return fmt.Sprint(Dead) // TODO: fix
 	return "TODO: implement"
 }

@@ -7,7 +7,7 @@ import (
 )
 
 func TestDefinition(t *testing.T) {
-	var definition Definition
+	var def definition
 
 	contents := strings.NewReader(`[Unit]
 Description=Description
@@ -23,14 +23,14 @@ After=After
 WantedBy=WantedBy
 RequiredBy=RequiredBy`)
 
-	if err := ParseDefinition(contents, &definition); err != nil {
+	if err := parseDefinition(contents, &def); err != nil {
 		t.Errorf("Error parsing definition: %s", err)
 	}
 
-	def := reflect.ValueOf(&definition).Elem()
-	for i := 0; i < def.NumField(); i++ {
+	defVal := reflect.ValueOf(&def).Elem()
+	for i := 0; i < defVal.NumField(); i++ {
 
-		section := def.Field(i)
+		section := defVal.Field(i)
 		sectionType := section.Type()
 
 		for j := 0; j < section.NumField(); j++ {

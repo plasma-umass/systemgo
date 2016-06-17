@@ -11,7 +11,7 @@ import (
 )
 
 // Definition of a unit matching the fields found in unit-file
-type Definition struct {
+type definition struct {
 	Unit struct {
 		Description                               string
 		Documentation                             string
@@ -22,53 +22,53 @@ type Definition struct {
 	}
 }
 
-// Description returns a string as found in Definition
-func (def Definition) Description() string {
+// Description returns a string as found in definition
+func (def definition) Description() string {
 	return def.Unit.Description
 }
 
-// Documentation returns a string as found in Definition
-func (def Definition) Documentation() string {
+// Documentation returns a string as found in definition
+func (def definition) Documentation() string {
 	return def.Unit.Documentation
 }
 
-// Wants returns a slice of unit names as found in Definition
-func (def Definition) Wants() []string {
+// Wants returns a slice of unit names as found in definition
+func (def definition) Wants() []string {
 	return def.Unit.Wants
 }
 
-// Requires returns a slice of unit names as found in Definition
-func (def Definition) Requires() []string {
+// Requires returns a slice of unit names as found in definition
+func (def definition) Requires() []string {
 	return def.Unit.Requires
 }
 
-// Conflicts returns a slice of unit names as found in Definition
-func (def Definition) Conflicts() []string {
+// Conflicts returns a slice of unit names as found in definition
+func (def definition) Conflicts() []string {
 	return def.Unit.Conflicts
 }
 
-// After returns a slice of unit names as found in Definition
-func (def Definition) After() []string {
+// After returns a slice of unit names as found in definition
+func (def definition) After() []string {
 	return def.Unit.After
 }
 
-// After returns a slice of unit names as found in Definition
-func (def Definition) Before() []string {
+// After returns a slice of unit names as found in definition
+func (def definition) Before() []string {
 	return def.Unit.After
 }
 
-// RequiredBy returns a slice of unit names as found in Definition
-func (def Definition) RequiredBy() []string {
+// RequiredBy returns a slice of unit names as found in definition
+func (def definition) RequiredBy() []string {
 	return def.Install.RequiredBy
 }
 
-// WantedBy returns a slice of unit names as found in Definition
-func (def Definition) WantedBy() []string {
+// WantedBy returns a slice of unit names as found in definition
+func (def definition) WantedBy() []string {
 	return def.Install.WantedBy
 }
 
 // ParseDefinition parses the data in Systemd unit-file format and stores the result in value pointed by definition
-func ParseDefinition(contents io.Reader, definition interface{}) (err error) { // TODO: find a better name for io.Reader parameter
+func parseDefinition(contents io.Reader, definition interface{}) (err error) { // TODO: find a better name for io.Reader parameter
 	// Access the underlying value of the pointer
 	def := reflect.ValueOf(definition).Elem()
 	if !def.IsValid() || !def.CanSet() {
@@ -81,11 +81,11 @@ func ParseDefinition(contents io.Reader, definition interface{}) (err error) { /
 		return
 	}
 
-	// Loop over deserialized options trying to match them to the ones as found in Definition
+	// Loop over deserialized options trying to match them to the ones as found in definition
 	for _, opt := range opts {
 		if v := def.FieldByName(opt.Section); v.IsValid() && v.CanSet() {
 			if v := v.FieldByName(opt.Name); v.IsValid() && v.CanSet() {
-				// reflect.Kind of field in Definition
+				// reflect.Kind of field in definition
 				switch v.Kind() {
 
 				// string
