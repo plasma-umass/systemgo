@@ -2,97 +2,108 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 
-	"github.com/b1101/systemgo/lib/errors"
-	"github.com/b1101/systemgo/lib/systemctl"
 	"github.com/b1101/systemgo/system"
 )
 
-type Handler func(s string) (interface{}, error)
+// TODO: introduce proper configuration
+type config struct {
+	// Default target
+	Target string
 
-var sys *system.System
+	// Paths to search for unit files
+	Paths []string
 
-const (
-	host = "127.0.0.1:28537"
-)
+	// Method of communication with systemctl
+	Method string
+
+	// Http connection configuration
+	*httpConfig
+}
+
+type httpConfig struct {
+	// Port for system daemon to listen on
+	Port
+}
+
+type Port int
+
+func (p Port) String() string {
+	return fmt.Sprintf(":%s", int(p))
+}
 
 var (
-	paths = []string{
-		// Gentoo-specific
-		//"/usr/lib/systemd/system",
-		// User overrides
-		//"/etc/systemd/system",
+	// Instance of a system
+	sys *system.System
 
-		"test",
-	}
+	// Default configuration
+	conf *config = &config{
+		Target: "default.target",
+		Method: "http",
+		httpConfig: &httpConfig{
+			Port: 28537,
+		},
+		Paths: []string{
+			// Gentoo-specific
+			//"/usr/lib/systemd/system",
+			// User overrides
+			//"/etc/systemd/system",
 
-	handlers = map[string]Handler{
-		"status": func(s string) (interface{}, error) {
-			if len(s) == 0 {
-				return sys.Status()
-			}
-			return sys.StatusOf(s)
-		},
-		"start": func(s string) (interface{}, error) {
-			return nil, sys.Start(s)
-		},
-		"stop": func(s string) (interface{}, error) {
-			return nil, sys.Stop(s)
-		},
-		"": func(s string) (interface{}, error) {
-			return nil, errors.WIP
+			"test",
 		},
 	}
 )
 
 func main() {
-	var err error
+	// Initialize system
+	sys = system.New()
+	sys.SetPaths(conf.Paths...)
 
-	if sys, err = system.New(paths...); err != nil {
-		log.Fatalln(err.Error())
+	// Start the default target
+	if err := sys.Start(conf.Target); err != nil {
+		sys.Log.Printf("Error starting default target %s: %s", conf.Target, err)
+		log.Printf("Error starting %s: %s", conf.Target, err)
 	}
-	sys.Log.Println("Started system")
 
-	if err = sys.Start("sv.service"); err != nil {
-		sys.Log.Println(err.Error())
+	// Listen for systemctl requests
+	switch conf.Method {
+	case "http":
+		if err := listenHTTP(conf.Port.String()); err != nil {
+			log.Fatalf("Error starting server on %s: %s", conf.Port, err)
+		}
 	}
+}
 
-	for name, h := range handlers {
-		func(handler Handler) {
-			http.HandleFunc("/"+name, func(w http.ResponseWriter, req *http.Request) {
+// Handle systemctl requests using HTTP
+func listenHTTP(addr string) (err error) {
+	server := http.NewServeMux()
+
+	for name, handler := range sys.Handlers() {
+		func(handler system.Handler) {
+			server.HandleFunc("/"+name, func(w http.ResponseWriter, req *http.Request) {
+				//msg := []systemctl.Response{}
 				v := req.URL.Query()
 
-				units, ok := v["unit"]
+				names, ok := v["unit"]
 				if !ok {
-					units = []string{""}
+					names = []string{}
 				}
 
-				for _, u := range units {
-					msg := systemctl.Response{}
+				var resp []byte
+				if resp, err = json.Marshal(handler(names...)); err != nil {
+					log.Printf("json.Marshal(result): %s", err)
+					return
+				}
 
-					if msg.Yield, err = handler(u); err != nil {
-						msg.Error = err.Error()
-					}
-
-					resp, err := json.Marshal(msg)
-					if err != nil {
-						log.Printf("json.Marshal(result): %s", err)
-						continue
-					}
-
-					if _, err := w.Write(resp); err != nil {
-						log.Printf("Write(resp): %s", err)
-					}
-
+				if _, err = w.Write(resp); err != nil {
+					log.Printf("Write(resp): %s", err)
 				}
 			})
-		}(h)
+		}(handler)
 	}
 
-	err = http.ListenAndServe(host, nil)
-	if err != nil {
-		log.Fatalf("ListenAndServe: %s", err)
-	}
+	return http.ListenAndServe(addr, server)
 }
