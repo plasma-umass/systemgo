@@ -4,9 +4,11 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/b1101/systemgo/lib/test"
 )
 
-func TestDefinition(t *testing.T) {
+func TestParse(t *testing.T) {
 	var def definition
 
 	contents := strings.NewReader(`[Unit]
@@ -24,7 +26,7 @@ WantedBy=WantedBy
 RequiredBy=RequiredBy`)
 
 	if err := parseDefinition(contents, &def); err != nil {
-		t.Errorf("Error parsing definition: %s", err)
+		t.Errorf(test.ErrorIn, "parseDefinition", err)
 	}
 
 	defVal := reflect.ValueOf(&def).Elem()
@@ -45,13 +47,13 @@ RequiredBy=RequiredBy`)
 			switch option.Kind() {
 			case reflect.String:
 				if option.String() != option.Name {
-					t.Errorf("%s != %s", option, option.Name)
+					t.Errorf(test.Mismatch, option, option.Name)
 				}
 			case reflect.SliceOf(reflect.TypeOf(reflect.String)).Kind():
 				slice := option.Interface().([]string)
 
 				if !reflect.DeepEqual(slice, []string{option.Name}) {
-					t.Errorf("%s != %s", slice, []string{option.Name})
+					t.Errorf(test.Mismatch, slice, []string{option.Name})
 				}
 			}
 		}

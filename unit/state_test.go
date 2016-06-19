@@ -3,6 +3,8 @@ package unit
 import (
 	"fmt"
 	"testing"
+
+	"github.com/b1101/systemgo/lib/test"
 )
 
 func TestStates(t *testing.T) {
@@ -22,7 +24,7 @@ func TestStates(t *testing.T) {
 
 	for state, out := range states {
 		if state.String() != out {
-			t.Errorf("%s != %s", state, out)
+			t.Errorf(test.Mismatch, state, out)
 		}
 	}
 }

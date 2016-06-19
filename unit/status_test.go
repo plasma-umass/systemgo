@@ -3,9 +3,12 @@ package unit
 import (
 	"fmt"
 	"testing"
+
+	"github.com/b1101/systemgo/lib/test"
 )
 
 func TestStatus(t *testing.T) {
+
 	st := Status{
 		Load: LoadStatus{
 			Path:   "Path",
@@ -32,6 +35,6 @@ Log:
 	)
 
 	if st.String() != expected {
-		t.Errorf("\nReceived:\n%s\nShould be:\n%s", st, expected)
+		t.Errorf(test.Mismatch, st, expected)
 	}
 }
