@@ -1,5 +1,5 @@
 # Description
-And init system in Go, intended to run on [Browsix](https://github.com/plasma-umass/browsix) and other Unix-like OS(GNU/Linux incl.)
+An init system in Go, intended to run on [Browsix](https://github.com/plasma-umass/browsix) and other Unix-like OS(GNU/Linux incl.)
 # Features
 * Fast and concurrent
 * Handles dependencies well
