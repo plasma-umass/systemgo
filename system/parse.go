@@ -1,100 +1,160 @@
 package system
 
 import (
-	"bytes"
-	"errors"
-	"io"
+	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
-	"github.com/b1101/systemgo/lib/handle"
 	"github.com/b1101/systemgo/unit"
-	"github.com/b1101/systemgo/unit/service"
-	"github.com/b1101/systemgo/unit/target"
 )
 
-var (
-	constructors = map[string]func(io.Reader) (Supervisable, error){
-		".service": func(r io.Reader) (Supervisable, error) {
-			return service.New(r)
-		},
-		".target": func(r io.Reader) (Supervisable, error) {
-			return target.New(r)
-		},
+// Load searches for a definition of unit name in configured paths and returns a unit.Supervisable (or nil) and error if any
+func (sys *System) load(name string) (u *Unit, err error) {
+	if !unit.SupportedName(name) {
+		return nil, unit.ErrUnknownType
 	}
-)
 
-// ParseAll searches for all specifications in given paths and returns a map of *Unit's parsed
-func ParseAll(paths ...string) (map[string]*Unit, error) {
-	units := map[string]*Unit{}
-	for _, path := range paths {
-		if err := filepath.Walk(path, func(fpath string, finfo os.FileInfo, _err error) error {
-			switch {
-			case _err != nil:
-				return _err
-			case fpath == path, finfo.IsDir() && !strings.HasSuffix(fpath, ".wants"):
-				return nil
-			}
+	for _, path := range sys.paths {
+		fpath := filepath.Clean(path + "/" + name)
 
-			var b bytes.Buffer
-			u := NewUnit(&b) // TODO: use config
-			u.name = finfo.Name()
-			units[finfo.Name()] = u
-
-			file, err := os.Open(fpath)
-			defer file.Close()
-			if err != nil {
-				u.Log.Println(err.Error())
-				return nil
-			}
-
-			if sup, err := matchAndCreate(finfo.Name(), file); err != nil {
-				u.Log.Println(err.Error())
-				u.stats.loaded = unit.Error
-			} else {
-				u.Supervisable = sup
-			}
-			u.stats.path = fpath
-			return nil
-
-		}); err != nil {
-			handle.Err(err)
+		sup, err := parsePath(fpath)
+		if err == os.ErrNotExist {
 			continue
 		}
+
+		u = NewUnit()
+		u.path = path
+
+		sys.parsedPaths[path] = u
+		sys.parsed[name] = u
+
+		if err != nil {
+			u.Log.Printf("Error parsing %s: %s", fpath, err)
+			u.loaded = unit.Error
+			return u, err
+		}
+
+		sys.loaded[name] = u
+		u.loaded = unit.Loaded
+
+		u.Supervisable = sup
+		for ptr, deps := range map[*[]*Unit][]string{
+			&u.After:    u.Supervisable.After(),
+			&u.Wants:    u.Supervisable.Wants(),
+			&u.Before:   u.Supervisable.Before(),
+			&u.Requires: u.Supervisable.Requires(),
+		} {
+			arr := make([]*Unit, len(deps))
+
+			for i, name := range deps {
+				if arr[i], err = sys.Unit(name); err != nil {
+					if ptr == &u.Requires {
+						u.Log.Printf("Error loading dependency %s: %s", name, err)
+						u.loaded = unit.Error
+						return u, err
+					}
+				}
+			}
+
+			*ptr = arr
+		}
+
+		for ptr, suffix := range map[*[]*Unit]string{
+			&u.Wants:    ".wants",
+			&u.Requires: ".required",
+		} {
+			dpath := fpath + suffix
+
+			if err = filepath.Walk(dpath, func(fpath string, finfo os.FileInfo, ferr error) error {
+				switch {
+				case ferr != nil:
+					return ferr
+				case fpath == dpath:
+					if !finfo.IsDir() {
+						err = ErrNotDir
+					}
+					return err
+				case !unit.SupportedName(fpath):
+					return nil
+				}
+
+				if path, err = os.Readlink(fpath); err != nil {
+					return fmt.Errorf("Error reading link %s: %s", finfo.Name(), err)
+				}
+
+				var dep *Unit
+				dep, ok := sys.parsedPaths[path]
+				if !ok {
+					dep = NewUnit()
+					if dep.Supervisable, err = parsePath(path); err != nil {
+						return fmt.Errorf("Error parsing definition of %s: %s", path, err)
+					}
+				}
+
+			}); err != nil {
+				u.Log.Printf("Error parsing %s: %s", dpath, err)
+				u.loaded = unit.Error
+			}
+		}
+		return u, err
 	}
-	return units, nil
+	return nil, ErrNotFound
 }
 
-//
-// TODO: Come back when reload() is ready
-//
+// parsePath determines the type of unit specified by the definition found in path,
+// creates a new unit of that type and returns a unit.Supervisable and error if any
+func parsePath(path string) (u unit.Supervisable, err error) {
+	var file *os.File
+	if file, err = os.Open(fpath); err != nil {
+		return
+	}
+	defer file.Close()
 
-//// ParseOne searches for specification of unit name in given paths, parses and returns a Supervisable
-//func ParseOne(name string, paths ...string) (Supervisable, error) {
-//	for _, path := range paths {
-//		file, err := os.Open(path + "/" + name)
-//		defer file.Close()
-//		if err != nil {
-//			if err != os.ErrNotExist {
-//				handle.Err(err)
-//			}
-//			continue
-//		}
-//
-//		u, err := matchAndCreate(name, file)
-//
-//		return &Unit{}
-//	}
-//	return nil, ErrNotExist // TODO: replace by not found, when lib is ready
-//}
+	var info os.FileInfo
+	if info, err = file.Stat(); err != nil {
+		return
+	}
 
-// matchAndCreate determines the unit type by name, creates and returns a Supervisable of that type
-func matchAndCreate(name string, definition io.Reader) (Supervisable, error) {
-	for suffix, constructor := range constructors {
-		if strings.HasSuffix(name, suffix) {
-			return constructor(definition)
+	if info.IsDir() {
+		return nil, ErrIsDir
+	}
+
+	var constr unit.Constructor
+	if constr, err = unit.ConstructorOfName(path); err != nil {
+		return
+	}
+
+	return constr(definition)
+}
+
+// pathset returns a slice of paths to definitions of supported unit types found in path specified
+func pathset(path string) (definitions []string, err error) {
+	var file *os.File
+	if file, err = os.Open(path); err != nil {
+		return
+	}
+	defer file.Close()
+
+	var info os.FileInfo
+	if info, err = file.Stat(); err != nil {
+		return
+	} else if !info.IsDir() {
+		err = ErrNotDir
+		return
+	}
+
+	var names []string
+	if names, err = file.Readdirnames(0); err != nil {
+		return
+	}
+
+	definitions = make([]string, 0, len(names))
+
+	for _, name := range names {
+		if unit.SupportedName(name) {
+			definitions = append(definitions, filepath.Clean(path+"/"+name))
 		}
 	}
-	return nil, errors.New(name + " does not match any known unit type")
+
+	return
 }

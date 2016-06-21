@@ -53,22 +53,16 @@ type System struct {
 //}
 //return
 //}
-
-func New(paths ...string) (sys *System, err error) {
-	sys = &System{
-		Queue: NewQueue(),
-		Paths: paths,
-		Since: time.Now(),
-		Log:   NewLog(),
+func New() (sys *System) {
+	defer func() {
+		go sys.queueStarter()
+	}()
+	return &System{
+		since: time.Now(),
+		queue: NewQueue(),
+		log:   NewLog(),
+		paths: DEFAULT_PATHS,
 	}
-
-	if sys.Units, err = ParseAll(paths...); err != nil {
-		sys.State = Degraded
-	}
-
-	go sys.queueStarter()
-
-	return
 }
 
 func (sys *System) Start(name string) (err error) {
@@ -178,13 +172,23 @@ func (sys System) IsActive(name string) (st unit.Activation, err error) {
 	return
 }
 
-func (sys System) unit(name string) (u *Unit, err error) {
+func (sys *System) Unit(name string) (u *Unit, err error) {
 	var ok bool
-	if u, ok = sys.Units[name]; !ok {
-		err = errors.NotFound
+	if u, ok = sys.loaded[name]; !ok {
+		u, err = sys.load(name)
 	}
 	return
 }
+
+//func (sys *System) Units(names ...string) (units []*Unit, err error) {
+//units = make([]*Unit, len(names))
+//for i, name := range names {
+//if units[i], err = sys.Unit(name); err != nil {
+//return
+//}
+//}
+//return
+//}
 
 func (sys *System) queueStarter() {
 	for u := range sys.Queue.Start {
