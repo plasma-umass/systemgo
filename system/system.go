@@ -1,7 +1,6 @@
 package system
 
 import (
-	"bytes"
 	"io/ioutil"
 	"time"
 
@@ -9,33 +8,38 @@ import (
 	"github.com/b1101/systemgo/unit"
 )
 
+var DEFAULT_PATHS = [...]string{"/etc/systemd/system/", "/run/systemd/system", "/lib/systemd/system"}
+
+var ErrNotFound = errors.New("Not found")
+
 type System struct {
-	// Map containing all units found
-	Units map[string]*Unit
+	// Map containing all loaded units
+	loaded map[string]*Unit
 
-	// Map of booleans *Unit->bool, indicating which units are enabled
-	Enabled map[*Unit]bool
+	// Map containing all parsed units(includes units failed to load)
+	parsed map[string]*Unit
 
-	// Map of booleans *Unit->bool, indicating which units are enabled
-	Failed map[*Unit]bool
+	// Map containing all parsed paths(includes units specified as symlinks)
+	// in *.wants and *.required directories
+	parsedPaths map[string]*Unit
 
 	// Slice of units in the queue
-	Queue *Queue
+	queue *Queue
 
 	// Status of global state
-	State State
+	state State
 
 	// Deal with concurrency
 	//sync.Mutex
 
 	// Paths, where the unit file specifications get searched for
-	Paths []string
+	paths []string
 
 	// Starting time
-	Since time.Time
+	since time.Time
 
 	// System log
-	Log *Log
+	log *Log
 }
 
 //var queue = make(chan *Unit)
@@ -55,7 +59,7 @@ func New(paths ...string) (sys *System, err error) {
 		Queue: NewQueue(),
 		Paths: paths,
 		Since: time.Now(),
-		Log:   NewLog(&bytes.Buffer{}),
+		Log:   NewLog(),
 	}
 
 	if sys.Units, err = ParseAll(paths...); err != nil {

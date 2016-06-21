@@ -2,9 +2,8 @@ package system
 
 import (
 	"container/heap"
+	"log"
 	"reflect"
-
-	"github.com/b1101/systemgo/lib/handle"
 )
 
 type Queue struct {
@@ -70,7 +69,7 @@ func (q *Queue) Swap(i, j int) {
 
 func (q *Queue) Push(x interface{}) {
 	if u, ok := x.(*Unit); !ok {
-		handle.Serr("Could not assert element to *system.Unit\n", reflect.TypeOf(x))
+		log.Fatalln("Could not assert element to *system.Unit\n", reflect.TypeOf(x))
 	} else {
 		if !q.queued[u] {
 			q.queue = append(q.queue, u)
@@ -101,4 +100,3 @@ func (q *Queue) Remove(u *Unit) {
 		}
 	}
 }
-

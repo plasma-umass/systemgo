@@ -2,92 +2,71 @@ package system
 
 import (
 	"bytes"
-	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 )
 
+// Byte size of log contents read to buffer
+const BUFFER_SIZE = 10000
+
+// Log uses log.Logger to write data to embedded bytes.Buffer
 type Log struct {
 	*log.Logger
-	out      io.Writer
-	contents contents
+	*bytes.Reader
+	buffer *bytes.Buffer
 }
 
-func NewLog(w io.Writer) *Log {
+// NewLog returns a new log
+func NewLog() (l *Log) {
+	defer func() {
+		l.Logger = log.New(l, "", log.LstdFlags)
+	}()
 	return &Log{
-		Logger: log.New(w, "", log.LstdFlags),
-		out:    w,
-		contents: contents{
-			Buffer: bytes.NewBuffer(make([]byte, 0, 10000)),
-		},
+		buffer: bytes.NewBuffer(make([]byte, 0, BUFFER_SIZE)),
 	}
 }
 
-func (l *Log) SetOutput(w io.Writer) {
-	l.out = w
-	l.Logger.SetOutput(w)
+func (l *Log) Len() (n int) {
+	return l.buffer.Len()
+}
+
+func (l *Log) Cap() (n int) {
+	return l.buffer.Cap()
 }
 
 func (l *Log) Read(b []byte) (n int, err error) {
-	var reader io.Reader
-	var ok bool
-	if reader, ok = l.out.(io.Reader); !ok {
-		return 0, fmt.Errorf("Cannot read from %T", l.out)
-	}
-
-	if _, err = l.contents.ReadFrom(reader); err != nil {
-		return
-	}
-
-	return l.contents.Read(b)
-}
-
-type contents struct {
-	*bytes.Buffer
-	io.Reader
-}
-
-func (c *contents) Read(b []byte) (n int, err error) {
-	if c.Reader == nil {
-		c.Reader = bytes.NewReader(c.Buffer.Bytes())
+	if l.Reader == nil {
+		l.Reader = bytes.NewReader(l.buffer.Bytes())
 	}
 	defer func() {
-		if err == io.EOF {
-			c.Reader = nil
+		if err == nil && l.Reader.Len() == 0 {
+			err = io.EOF
+			l.Reader = nil
 		}
 	}()
-	return c.Reader.Read(b)
+	return l.Reader.Read(b)
 }
 
-func (c *contents) ReadFrom(r io.Reader) (n int64, err error) {
-	var b []byte
-	if b, err = ioutil.ReadAll(r); err != nil {
-		return
-	}
-	_, err = c.Write(b)
-	return int64(len(b)), err
-}
-
-func (c *contents) Write(b []byte) (n int, err error) {
-	if c.Len()+len(b) <= c.Cap() {
-		return c.Buffer.Write(b)
+func (l *Log) Write(b []byte) (n int, err error) {
+	if l.Len()+len(b) <= l.Cap() {
+		return l.buffer.Write(b)
 	}
 
+	// Make sure that no 'partial' strings are left in buffer, as the buffer capacity is exceeded
 	defer func() {
 		if err == nil {
-			_, err = c.Buffer.ReadString('\n')
+			_, err = l.buffer.ReadString('\n')
 		}
 	}()
 
-	if len(b) >= c.Cap() {
-		c.Buffer.Reset()
-		return c.Buffer.Write(b[len(b)-c.Cap():])
+	if len(b) >= l.Cap() {
+		l.buffer.Reset()
+		return l.buffer.Write(b[len(b)-l.Cap():])
 	}
 
-	if _, err = c.Buffer.Read(make([]byte, len(b)+c.Len()-c.Cap())); err != nil {
+	if _, err = l.buffer.Read(make([]byte, len(b)-l.Cap()+l.Len())); err != nil {
 		return 0, err
 	}
 
-	return c.Buffer.Write(b)
+	return l.buffer.Write(b)
 }
