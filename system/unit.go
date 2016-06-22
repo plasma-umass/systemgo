@@ -1,7 +1,6 @@
 package system
 
 import (
-	"io"
 	"sync"
 
 	"github.com/b1101/systemgo/unit"
@@ -10,17 +9,15 @@ import (
 type Unit struct {
 	Supervisable
 
-	Log *Log
+	path   string
+	loaded unit.Load
 
-	name string
-
-	stats struct {
-		path   string
-		loaded unit.Load
-	}
+	Requires, Wants, After, Before []*Unit
 
 	listeners listeners
 	rdy       chan interface{}
+
+	Log *Log
 }
 
 type listeners struct {
@@ -28,12 +25,12 @@ type listeners struct {
 	sync.Mutex
 }
 
-func NewUnit(output io.Writer) (u *Unit) { // TODO: more descriptive param name?
+func NewUnit() (u *Unit) {
 	defer func() {
 		go u.readyNotifier()
 	}()
 	return &Unit{
-		Log: NewLog(output),
+		Log: NewLog(),
 		rdy: make(chan interface{}),
 	}
 }
@@ -48,7 +45,6 @@ func (u *Unit) readyNotifier() {
 		u.listeners.ch = []chan interface{}{}
 	}
 }
-
 func (u *Unit) ready() {
 	u.rdy <- struct{}{}
 }
@@ -61,51 +57,44 @@ func (u *Unit) waitFor() <-chan interface{} {
 	return c
 }
 
-//func (u *Unit) Log(v ...interface{}) {
-//str := ""
-//if len(v) > 0 {
-//str += v[0].(string)
-//v = v[1:]
-
-//for _, w := range v {
-//str += " " + w.(string)
-//}
-//}
-//u.log.Logger.Println(str)
-//}
-
-//func (u *Unit) Read(b []byte) (int, error) {
-//if reader, ok := u.log.out.(io.Reader); ok {
-//return reader.Read(b)
-//}
-//return 0, errors.New("unreadable")
-//}
-
-func (u Unit) Name() string {
-	return u.name
-}
-func (u Unit) Description() string {
-	if u.Supervisable != nil {
-		return u.Supervisable.Description()
-	} else {
-		return ""
-	}
-}
-
 func (u Unit) Path() string {
-	return u.stats.path
+	return u.path
 }
 func (u Unit) Loaded() unit.Load {
-	return u.stats.loaded
+	return u.loaded
 }
+func (u Unit) Description() string {
+	if u.Supervisable == nil {
+		return ""
+	}
 
-//func (u Unit) Enabled() unit.Enable {
-//return u.stats.enabled
-//}
+	return u.Supervisable.Description()
+}
 func (u Unit) Active() unit.Activation {
-	if u.Supervisable != nil {
-		return u.Supervisable.Active()
-	} else {
+	if u.Supervisable == nil {
 		return unit.Inactive
 	}
+
+	if subber, ok := u.Supervisable.(unit.Subber); ok {
+		return subber.Active()
+	}
+
+	for _, dep := range u.Requires { // TODO: find out what systemd does
+		if dep.Active() != unit.Active {
+			return unit.Inactive
+		}
+	}
+
+	return unit.Active
+}
+func (u Unit) Sub() string {
+	if u.Supervisable == nil {
+		return "dead"
+	}
+
+	if subber, ok := u.Supervisable.(unit.Subber); ok {
+		return subber.Sub()
+	}
+
+	return u.Active().String()
 }

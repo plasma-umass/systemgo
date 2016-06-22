@@ -193,7 +193,7 @@ func (sys *System) queueStarter() {
 
 			u.Log.Println("Checking Conflicts...", u.Name())
 			for _, name := range u.Conflicts() {
-				if dep, _ := sys.unit(name); dep != nil && isUp(dep) {
+				if dep, _ := sys.Unit(name); dep != nil && isActive(dep) {
 					u.Log.Println("Unit conflicts with", name)
 					return
 				}
@@ -201,10 +201,10 @@ func (sys *System) queueStarter() {
 
 			u.Log.Println("Checking Requires...", u.Name())
 			for _, name := range u.Requires() {
-				if dep, err := sys.unit(name); err != nil {
+				if dep, err := sys.Unit(name); err != nil {
 					u.Log.Println(name, err.Error())
 					return
-				} else if !isUp(dep) && !isLoading(dep) {
+				} else if !isActive(dep) && !isActivating(dep) {
 					sys.Queue.Add(dep)
 				}
 			}
@@ -212,10 +212,10 @@ func (sys *System) queueStarter() {
 			u.Log.Println("Checking After...", u.Name())
 			for _, name := range u.After() {
 				u.Log.Println("after", name)
-				if dep, err := sys.unit(name); err != nil {
+				if dep, err := sys.Unit(name); err != nil {
 					u.Log.Println(name, err.Error())
 					return
-				} else if !isUp(dep) {
+				} else if !isActive(dep) {
 					u.Log.Println("Waiting for", dep.Name(), "to start")
 					<-dep.waitFor()
 					u.Log.Println(dep.Name(), "started")
@@ -224,7 +224,7 @@ func (sys *System) queueStarter() {
 
 			u.Log.Println("Checking Requires again...", u.Name())
 			for _, name := range u.Requires() {
-				if dep, _ := sys.unit(name); !isUp(dep) {
+				if dep, _ := sys.Unit(name); !isActive(dep) {
 					return
 				}
 			}
@@ -239,9 +239,13 @@ func (sys *System) queueStarter() {
 	}
 }
 
-func isUp(u Supervisable) bool {
+func isActive(u Supervisable) bool {
 	return u.Active() == unit.Active
 }
-func isLoading(u Supervisable) bool {
+func isActivating(u Supervisable) bool {
 	return u.Active() == unit.Activating
+}
+func (sys *System) isLoaded(name string) (loaded bool) {
+	_, loaded = sys.Loaded[name]
+	return
 }

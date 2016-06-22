@@ -45,18 +45,18 @@ func (q Queue) Len() int {
 }
 
 func (q Queue) Less(i, j int) bool {
-	for _, name := range q.queue[j].Requires() {
-		if q.queue[i].Name() == name {
+	for _, u := range q.queue[j].Requires {
+		if u == &q.queue[i] {
 			return true
 		}
 	}
-	for _, name := range q.queue[j].Wants() {
-		if q.queue[i].Name() == name {
+	for _, u := range q.queue[j].Wants {
+		if u == &q.queue[i] {
 			return true
 		}
 	}
-	for _, name := range q.queue[j].After() {
-		if q.queue[i].Name() == name {
+	for _, u := range q.queue[j].After {
+		if u == &q.queue[i] {
 			return true
 		}
 	}
