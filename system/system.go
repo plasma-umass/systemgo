@@ -4,13 +4,10 @@ import (
 	"io/ioutil"
 	"time"
 
-	"github.com/b1101/systemgo/lib/errors"
 	"github.com/b1101/systemgo/unit"
 )
 
 var DEFAULT_PATHS = [...]string{"/etc/systemd/system/", "/run/systemd/system", "/lib/systemd/system"}
-
-var ErrNotFound = errors.New("Not found")
 
 type System struct {
 	// Map containing all loaded units
