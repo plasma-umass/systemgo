@@ -184,99 +184,62 @@ func (sys *System) StatusOf(name string) (st unit.Status, err error) {
 
 	return
 }
-func (sys System) IsEnabled(name string) (st unit.Enable, err error) {
-	var u *Unit
-	if u, err = sys.unit(name); err == nil && sys.Enabled[u] {
-		st = unit.Enabled
-	}
-	return
-}
-func (sys System) IsActive(name string) (st unit.Activation, err error) {
-	var u *Unit
-	if u, err = sys.unit(name); err == nil {
-		st = u.Active()
-	}
-	return
-}
 
-func (sys *System) Unit(name string) (u *Unit, err error) {
-	var ok bool
-	if u, ok = sys.loaded[name]; !ok {
-		u, err = sys.load(name)
+// Status returns status of the system
+func (sys *System) Status() (st Status, err error) {
+	st = Status{
+		State: sys.state,
+		Since: sys.since,
 	}
+
+	st.Log, err = ioutil.ReadAll(sys.Log)
+
 	return
 }
 
-//func (sys *System) Units(names ...string) (units []*Unit, err error) {
-//units = make([]*Unit, len(names))
-//for i, name := range names {
-//if units[i], err = sys.Unit(name); err != nil {
-//return
-//}
-//}
-//return
-//}
-
-func (sys *System) queueStarter() {
-	for u := range sys.Queue.Start {
-		go func(u *Unit) {
-			u.Log.Println("Starting", u.Name())
-
-			u.Log.Println("Checking Conflicts...", u.Name())
-			for _, name := range u.Conflicts() {
-				if dep, _ := sys.Unit(name); dep != nil && isActive(dep) {
-					u.Log.Println("Unit conflicts with", name)
-					return
-				}
-			}
-
-			u.Log.Println("Checking Requires...", u.Name())
-			for _, name := range u.Requires() {
-				if dep, err := sys.Unit(name); err != nil {
-					u.Log.Println(name, err.Error())
-					return
-				} else if !isActive(dep) && !isActivating(dep) {
-					sys.Queue.Add(dep)
-				}
-			}
-
-			u.Log.Println("Checking After...", u.Name())
-			for _, name := range u.After() {
-				u.Log.Println("after", name)
-				if dep, err := sys.Unit(name); err != nil {
-					u.Log.Println(name, err.Error())
-					return
-				} else if !isActive(dep) {
-					u.Log.Println("Waiting for", dep.Name(), "to start")
-					<-dep.waitFor()
-					u.Log.Println(dep.Name(), "started")
-				}
-			}
-
-			u.Log.Println("Checking Requires again...", u.Name())
-			for _, name := range u.Requires() {
-				if dep, _ := sys.Unit(name); !isActive(dep) {
-					return
-				}
-			}
-
-			if err := u.Start(); err != nil {
-				u.Log.Println(err.Error())
-			}
-
-			u.Log.Println("Started")
-			u.ready()
-		}(u)
+// Load searches for a definition of unit name in configured paths parses it and returns a unit.Supervisable (or nil) and error if any
+func (sys *System) Load(name string) (u *Unit, err error) {
+	if !unit.SupportedName(name) {
+		return nil, unit.ErrUnknownType
 	}
+
+	var paths []string
+	if filepath.IsAbs(name) {
+		paths = []string{name}
+	} else {
+		paths := make([]string, len(sys.paths))
+		for i, path := range paths {
+			paths[i] = filepath.Clean(path + "/" + name)
+		}
+	}
+
+	for _, path := range paths {
+		if u, err = sys.load(path); err != nil {
+			if err == os.ErrNotExist {
+				continue
+			}
+			sys.Log.Printf("%s", err)
+		}
+	}
+
+	return nil, ErrNotFound
 }
 
-func isActive(u Supervisable) bool {
-	return u.Active() == unit.Active
-}
-func isActivating(u Supervisable) bool {
-	return u.Active() == unit.Activating
-}
-func (sys *System) isLoaded(name string) (loaded bool) {
-	_, loaded = sys.Loaded[name]
-	return
+func (sys *System) load(path string) (u *Unit, err error) {
+	var sup unit.Supervisable
+	if sup, err = parseFile(path); err != nil {
+		return
+	}
+
+	u = sys.NewUnit(sup)
+	u.path = path
+
+	if err != nil {
+		u.Log.Printf("Error parsing definition: %s", err)
+		u.loaded = unit.Error
+		return u, err
+	}
+
+	u.loaded = unit.Loaded
+	return u, err
 }
