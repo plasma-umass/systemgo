@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+
+	"github.com/b1101/systemgo/unit"
 )
 
 // System communication client using HTTP protocol
@@ -25,9 +27,9 @@ func (c HttpClient) String() string {
 	return c.Addr()
 }
 
-func (c *HttpClient) Get(cmd string, units ...string) (dec *json.Decoder, err error) {
+func (c *HttpClient) Get(cmd string, names ...string) (dec *json.Decoder, err error) {
 	var resp *http.Response
-	if resp, err = getHTTP(c.Addr(), cmd, units...); err != nil {
+	if resp, err = getHTTP(c.Addr(), cmd, names...); err != nil {
 		return
 	}
 	defer resp.Body.Close()
@@ -40,9 +42,9 @@ func (c *HttpClient) Get(cmd string, units ...string) (dec *json.Decoder, err er
 	return json.NewDecoder(bytes.NewReader(yield)), nil
 }
 
-func (c *HttpClient) Do(cmd string, units ...string) (err error) {
+func (c *HttpClient) Do(cmd string, names ...string) (err error) {
 	var resp *http.Response
-	if resp, err = getHTTP(c.Addr(), cmd, units...); err != nil {
+	if resp, err = getHTTP(c.Addr(), cmd, names...); err != nil {
 		return
 	}
 	defer resp.Body.Close()
@@ -52,13 +54,16 @@ func (c *HttpClient) Do(cmd string, units ...string) (err error) {
 	return
 }
 
-func getHTTP(addr, cmd string, units ...string) (*http.Response, error) {
-	if len(units) == 0 {
+func getHTTP(addr, cmd string, names ...string) (*http.Response, error) {
+	if len(names) == 0 {
 		return http.Get(addr + "/" + cmd)
 	} else {
 		v := url.Values{}
-		for _, unit := range units {
-			v.Add("unit", unit)
+		for _, name := range names {
+			if !unit.SupportedName(name) {
+				name += ".service"
+			}
+			v.Add("unit", name)
 		}
 
 		return http.Get(addr + "/" + cmd + "?" + v.Encode())
