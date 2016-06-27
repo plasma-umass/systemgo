@@ -33,7 +33,6 @@ func (sys System) Handlers() map[string]Handler {
 			}
 			return
 		},
-
 		"start": func(names ...string) (resp []Response) {
 			resp = make([]Response, len(names))
 			// WIP
@@ -64,49 +63,30 @@ func (sys System) Handlers() map[string]Handler {
 	}
 }
 
-func (sys *System) Start(name string) (err error) {
-	units, err := sys.units(names)
-	if err != nil {
+func (sys *System) Start(names ...string) (err error) {
+	if err = sys.NewJob(start, names...); err != nil {
 		return
 	}
 
-	return sys.enqueue(unit)
+	return job.Start()
 }
 
-//if u, err = sys.unit(name); err == nil {
-////sys.Queue.Add(u)
-//u.Start()
-//}
-func (sys *System) Stop(name string) (err error) {
-	if units, err := sys.units(names); err == nil {
-		err = sys.stop(unit)
+func (sys *System) Stop(names ...string) (err error) {
+	if err = sys.NewJob(stop, names...); err != nil {
+		return
 	}
-	return
+
+	return job.Start()
 }
 
-//var u *Unit
-//if u, err = sys.unit(name); err == nil {
-////sys.Queue.Remove(u)
-////u.Stop()
-//sys.stop(units...)
-//}
-//return
-
-func (sys *System) Restart(name string) (err error) {
-	if units, err := sys.units(names); err == nil {
-		err = sys.restart(unit)
+func (sys *System) Restart(names ...string) (err error) {
+	// rewrite as a loop to preserve errors
+	if err = sys.Stop(names...); err != nil {
+		return
 	}
-	return
+	return sys.Start(names...)
 }
 
-//var u *Unit
-//if u, err = sys.unit(name); err == nil {
-////sys.Queue.Remove(u)
-//u.Restart()
-////sys.Queue.Add(u)
-//}
-//return
-//}
 func (sys *System) Reload(name string) (err error) {
 	if units, err := sys.units(names); err == nil {
 		err = sys.reload(units)
