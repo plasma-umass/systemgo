@@ -1,10 +1,5 @@
 package system
 
-import (
-	"github.com/b1101/systemgo/lib/errors"
-	"github.com/b1101/systemgo/unit"
-)
-
 type Response struct {
 	Yield interface{}
 	Error string
@@ -12,127 +7,99 @@ type Response struct {
 
 type Handler func(...string) []Response
 
-func (sys System) Handlers() map[string]Handler {
+func (sys *System) Handlers() map[string]Handler {
 	return map[string]Handler{
-
 		"status": func(names ...string) (resp []Response) {
-			var err error
-
 			if len(names) == 0 {
-				resp = make([]Response, 1)
-				if resp[0].Yield, err = sys.Status(); err != nil {
-					resp[0].Error = err.Error()
-				}
+				return handle(func() (interface{}, error) {
+					return sys.Status()
+				})
 			} else {
-				resp = make([]Response, len(names))
-				for i, name := range names {
-					if resp[i], err = sys.StatusOf(name); err != nil {
-						resp[i].Error = err.Error()
-					}
-				}
+				return handleEach(names, func(name string) (interface{}, error) {
+					return sys.StatusOf(name)
+				})
 			}
 			return
 		},
 		"start": func(names ...string) (resp []Response) {
-			resp = make([]Response, len(names))
-			// WIP
-			for i, name := range names {
-				if err := sys.enqueue(name); err != nil {
-					resp[i].Error = err.Error()
-				}
-			}
+			return handleErr(func() error {
+				return sys.Start(names...)
+			})
 		},
 		"stop": func(names ...string) (resp []Response) {
-			return nil, sys.Stop(names)
+			return handleEachErr(names, func(name string) error {
+				return sys.Stop(name)
+			})
 		},
 		"restart": func(names ...string) (resp []Response) {
-			return nil, sys.Restart(names)
+			return handleEachErr(names, func(name string) error {
+				return sys.Restart(name)
+			})
 		},
 		"reload": func(names ...string) (resp []Response) {
-			return nil, sys.Reload(names)
+			return handleEachErr(names, func(string) error {
+				//return sys.Reload(name)
+				return ErrNotImplemented // TODO
+			})
 		},
 		"enable": func(names ...string) (resp []Response) {
-			return nil, sys.Enable(names)
+			return handleEachErr(names, func(name string) error {
+				//return sys.Enable(name)
+				return ErrNotImplemented // TODO
+			})
 		},
 		"disable": func(names ...string) (resp []Response) {
-			return nil, sys.Disable(names)
+			return handleEachErr(names, func(name string) error {
+				//return sys.Disable(name)
+				return ErrNotImplemented // TODO
+			})
 		},
 		"": func(names ...string) (resp []Response) {
-			return nil, errors.WIP
+			return handle(func() (interface{}, error) {
+				//return sys.ListUnits()
+				return nil, ErrNotImplemented // TODO
+			})
 		},
 	}
 }
+func handle(fn func() (interface{}, error)) (resp []Response) {
+	resp = make([]Response, 1)
 
-func (sys *System) Start(names ...string) (err error) {
-	if err = sys.NewJob(start, names...); err != nil {
-		return
-	}
-
-	return job.Start()
-}
-
-func (sys *System) Stop(names ...string) (err error) {
-	if err = sys.NewJob(stop, names...); err != nil {
-		return
-	}
-
-	return job.Start()
-}
-
-func (sys *System) Restart(names ...string) (err error) {
-	// rewrite as a loop to preserve errors
-	if err = sys.Stop(names...); err != nil {
-		return
-	}
-	return sys.Start(names...)
-}
-
-func (sys *System) Reload(name string) (err error) {
-	if units, err := sys.units(names); err == nil {
-		err = sys.reload(units)
-	}
-	return
-	//var u *Unit
-	//if u, err = sys.unit(name); err == nil {
-	//if reloader, ok := u.Supervisable.(Reloader); ok {
-	//reloader.Reload()
-	//} else {
-	//err = errors.NoReload
-	//}
-	//}
-	//return
-}
-func (sys *System) Enable(name string) (err error) {
-	if units, err := sys.units(names); err == nil {
-		err = sys.enable(units)
-	}
-	return
-	//var u *Unit
-	//if u, err = sys.unit(name); err == nil {
-	////sys.Enabled[u] = true
-	//u.Enable()
-	//}
-	//return
-	//}
-}
-
-func (sys *System) Disable(name string) (err error) {
-	if units, err := sys.units(names); err == nil {
-		err = sys.disable(units)
+	var err error
+	if resp[0].Yield, err = fn(); err != nil {
+		resp[0].Error = err.Error()
 	}
 	return
 }
 
-func (sys *System) StatusOf(name string) (statuses []unit.Status, err error) {
-	statuses = make([]unit.Status, len(names))
+func handleEach(names []string, fn func(string) (interface{}, error)) (resp []Response) {
+	resp = make([]Response, len(names))
+
 	for i, name := range names {
-		var u *Unit
-		if statuses[i], err = sys.unit(name); err != nil {
-			return
+		var err error
+		if resp[i].Yield, err = fn(name); err != nil {
+			resp[i].Error = err.Error()
 		}
 	}
+	return
 }
 
-func (sys *System) Reload() (err error) {
-	//
+func handleErr(fn func() error) (resp []Response) {
+	resp = make([]Response, 1)
+
+	if err := fn(); err != nil {
+		resp[0].Error = err.Error()
+	}
+	return
+}
+
+func handleEachErr(names []string, fn func(string) error) (resp []Response) {
+	resp = make([]Response, len(names))
+
+	for i, name := range names {
+		if err := fn(name); err != nil {
+			resp[i].Error = err.Error()
+		}
+	}
+	return
 }

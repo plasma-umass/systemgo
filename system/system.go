@@ -1,47 +1,36 @@
 package system
 
 import (
+	"fmt"
 	"io/ioutil"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/b1101/systemgo/unit"
 )
 
-var DEFAULT_PATHS = [...]string{"/etc/systemd/system/", "/run/systemd/system", "/lib/systemd/system"}
+var DEFAULT_PATHS = []string{"/etc/systemd/system/", "/run/systemd/system", "/lib/systemd/system"}
 
 type System struct {
-	// Map containing all loaded units
+	// Map containing pointers to all active units(name -> *Unit)
+	units map[string]*Unit
+
+	// Map containing pointers to all units including those failed to load(name -> *Unit)
 	loaded map[string]*Unit
-
-	// Map containing all parsed units(includes units failed to load)
-	parsed map[string]*Unit
-
-	// Map containing all parsed paths(includes units specified as symlinks)
-	// in *.wants and *.required directories
-	parsedPaths map[string]*Unit
-
-	// Slice of units in the queue
-	queue *Queue
-
-	// Status of global state
-	state State
-
-	// Deal with concurrency
-	//sync.Mutex
 
 	// Paths, where the unit file specifications get searched for
 	paths []string
+
+	// System state
+	state State
 
 	// Starting time
 	since time.Time
 
 	// System log
-	log *Log
+	Log *Log
 }
-
-//var queue = make(chan *Unit)
-
-//type units map[string]*Unit
 
 //func (us units) String() (out string) {
 //for _, u := range us {
@@ -51,65 +40,17 @@ type System struct {
 //return
 //}
 func New() (sys *System) {
-	defer func() {
-		go sys.queueStarter()
-	}()
 	return &System{
 		since: time.Now(),
-		queue: NewQueue(),
-		log:   NewLog(),
+		//queue:  NewQueue(),
+		Log:   NewLog(),
 		paths: DEFAULT_PATHS,
+		units: make(map[string]*Unit),
 	}
 }
 
-func (sys *System) Start(name string) (err error) {
-	var u *Unit
-	if u, err = sys.unit(name); err == nil {
-		sys.Queue.Add(u)
-	}
-	return
-}
-func (sys *System) Stop(name string) (err error) {
-	var u *Unit
-	if u, err = sys.unit(name); err == nil {
-		sys.Queue.Remove(u)
-		u.Stop()
-	}
-	return
-}
-func (sys *System) Restart(name string) (err error) {
-	var u *Unit
-	if u, err = sys.unit(name); err == nil {
-		sys.Queue.Remove(u)
-		u.Stop()
-		sys.Queue.Add(u)
-	}
-	return
-}
-func (sys *System) Reload(name string) (err error) {
-	var u *Unit
-	if u, err = sys.unit(name); err == nil {
-		if reloader, ok := u.Supervisable.(Reloader); ok {
-			reloader.Reload()
-		} else {
-			err = errors.NotFound
-		}
-	}
-	return
-}
-func (sys *System) Enable(name string) (err error) {
-	var u *Unit
-	if u, err = sys.unit(name); err == nil {
-		sys.Enabled[u] = true
-	}
-	return
-}
-func (sys *System) Disable(name string) (err error) {
-	var u *Unit
-	if u, err = sys.unit(name); err == nil {
-		delete(sys.Enabled, u)
-	}
-	return
+func (sys *System) SetPaths(paths ...string) {
+	sys.paths = paths
 }
 
 //func (sys System) WriteStatus(output io.Writer, names ...string) (err error) {
@@ -119,22 +60,111 @@ func (sys *System) Disable(name string) (err error) {
 //out += fmt.Sprintln(s.Units)
 //}
 
-func (sys System) Status() (st Status, err error) {
-	st = Status{
-		State:  sys.State,
-		Jobs:   sys.Queue.Len(),
-		Failed: len(sys.Failed),
-		Since:  sys.Since,
+func (sys *System) Unit(name string) (u *Unit, err error) {
+	var ok bool
+	if u, ok = sys.units[name]; !ok {
+		err = ErrNotFound
+	}
+	return
+}
+
+func (sys *System) Get(name string) (u *Unit, err error) {
+	if u, err = sys.Unit(name); err == ErrNotFound {
+		u, err = sys.Load(name)
+	}
+	return
+}
+
+func (sys *System) Loaded(name string) (u *Unit, err error) {
+	var ok bool
+	if u, ok = sys.units[name]; !ok {
+		err = ErrNotFound
+	}
+	return
+}
+
+func (sys *System) Start(names ...string) (err error) {
+	var job *Job
+	if job, err = sys.NewJob(start, names...); err != nil {
+		return
 	}
 
-	st.Log, err = ioutil.ReadAll(sys.Log)
-
-	return
-
+	return job.Start()
 }
-func (sys System) StatusOf(name string) (st unit.Status, err error) {
+
+func (sys *System) Stop(name string) (err error) {
+	var job *Job
+	if job, err = sys.NewJob(stop, name); err != nil {
+		return
+	}
+
+	return job.Start()
+}
+
+func (sys *System) Restart(name string) (err error) {
+	// rewrite as a loop to preserve errors
+	if err = sys.Stop(name); err != nil {
+		return
+	}
+	return sys.Start(name)
+}
+
+func (sys *System) Reload(name string) (err error) {
 	var u *Unit
-	if u, err = sys.unit(name); err != nil {
+	if u, err = sys.Unit(name); err != nil {
+		return
+	}
+
+	if reloader, ok := u.Supervisable.(unit.Reloader); ok {
+		return reloader.Reload()
+	}
+
+	return ErrNoReload
+}
+
+func (sys *System) Enable(name string) (err error) {
+	var u *Unit
+	if u, err = sys.Unit(name); err != nil {
+		return
+	}
+	u.Log.Println("enable")
+	return fmt.Errorf("TODO")
+}
+
+func (sys *System) Disable(name string) (err error) {
+	var u *Unit
+	if u, err = sys.Unit(name); err != nil {
+		return
+	}
+	u.Log.Println("disable")
+	return fmt.Errorf("TODO")
+}
+
+// IsEnabled returns enable state of the unit held in-memory under specified name
+// If error is returned, it is going to be ErrNotFound
+func (sys *System) IsEnabled(name string) (st unit.Enable, err error) {
+	//var u *Unit
+	//if u, err = sys.Unit(name); err == nil && sys.Enabled[u] {
+	//st = unit.Enabled
+	//}
+	return unit.Enabled, ErrNotImplemented
+}
+
+// IsActive returns activation state of the unit held in-memory under specified name
+// If error is returned, it is going to be ErrNotFound
+func (sys *System) IsActive(name string) (st unit.Activation, err error) {
+	var u *Unit
+	if u, err = sys.Unit(name); err == nil {
+		st = u.Active()
+	}
+	return
+}
+
+// StatusOf returns status of the unit held in-memory under specified name
+// If error is returned, it is going to be ErrNotFound
+func (sys *System) StatusOf(name string) (st unit.Status, err error) {
+	var u *Unit
+	if u, err = sys.Unit(name); err != nil {
 		return
 	}
 
