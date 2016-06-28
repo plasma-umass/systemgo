@@ -32,7 +32,7 @@ type httpConfig struct {
 type Port int
 
 func (p Port) String() string {
-	return fmt.Sprintf(":%s", int(p))
+	return fmt.Sprintf(":%v", int(p))
 }
 
 var (
@@ -66,6 +66,10 @@ func main() {
 	if err := sys.Start(conf.Target); err != nil {
 		sys.Log.Printf("Error starting default target %s: %s", conf.Target, err)
 		log.Printf("Error starting %s: %s", conf.Target, err)
+		if err = sys.Start("rescue.target"); err != nil {
+			sys.Log.Printf("Error starting rescue target %s: %s", "rescue.target", err)
+			log.Printf("Error starting %s: %s", "rescue.target", err)
+		}
 	}
 
 	// Listen for systemctl requests
