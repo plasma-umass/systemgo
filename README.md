@@ -7,6 +7,9 @@ An init system in Go, intended to run on [Browsix](https://github.com/plasma-uma
 
 Part of [GSoC project](https://summerofcode.withgoogle.com/projects/#6227933760847872)
 
+[![Build Status](https://travis-ci.org/b1101/systemgo.svg?branch=master)](https://travis-ci.org/b1101/systemgo)
+[![Coverage Status](https://coveralls.io/repos/github/b1101/systemgo/badge.svg?branch=master)](https://coveralls.io/github/b1101/systemgo?branch=master)
+
 # Progress
 - [x] Logging
     - [ ] Log destination can be configured
