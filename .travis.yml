@@ -1,0 +1,19 @@
+language: go
+sudo: false
+go:
+    - tip
+
+before_install:
+    - go get golang.org/x/tools/cmd/stringer
+    - go get github.com/mattn/goveralls
+    - go get golang.org/x/tools/cmd/cover
+
+#install:
+    #- make deps
+script:
+    - make
+    - goveralls -service travis-ci -repotoken $COVERALLS_TOKEN
+
+env:
+  global:
+    secure: iQkAicKvdFL70ganLn4ibvgRaV+4RwtXZ0O+nZkHKpTgtpImYaHNwJQl/iNESmm6K27Tv50VoRYYtTWsAjrJdAWe19qi1m9TR8/NCH4eaIVaFQiLt1sOWuXusdyBCfmmnisg3oHQ6Rf5nTCf8FHLEU7BS449OwNuiIuR110TT/6dkguxOpdo0PB1I1e2SXc3GnzuUhFz9B075korJ81UOeT7O8xJLdFVUEt0hwYY3Fm3DaWsbbLLWKFn77Tm04W0Boh0UaAbB4d+YvrQUgkvbqEHHECODmo/7TYd6w6NF0pEkrebVHk1SdtxrDyIH9rwWFZoZGVGr6opXqrJbPTbMH2292wR5Du9R0a51Q5hfIqqskRiOJz3JiwU2MrlgEJLRzCnV2jwqleAItmTsvFG0fvIWNznReqhgOruIHZlYW9GgZ+AhoDZN40L8l4Sa6hwl2xNhjCUdrLDtAhMonOa6B5GDIZGEvSvQVyMLP4DMBEJIowDpTSG8JsjNN9E9PnVupVw81ie7UpEoX0xAx3tgRQIWkr64JxFMdmkhxdAvBfQo9VXK8+FjJxRb5Nxh93iXO6pmB5yVgKWFa3Eaf7/3TfDQv+KwJ23NQjCunH/rO9mX5Z3dwb6E/RSfJMf2jpycp7jPwAaYLYXz9GnPGHqxCKgqNOs9CHrDYEB3RNq1hE=
