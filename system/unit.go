@@ -167,7 +167,6 @@ func (u *Unit) Start() (err error) {
 func (u *Unit) Stop() (err error) {
 	return ErrNotImplemented
 }
-
 func (u Unit) isActive() bool {
 	return u.Active() == unit.Active
 }

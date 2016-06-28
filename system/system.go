@@ -43,9 +43,10 @@ func New() (sys *System) {
 	return &System{
 		since: time.Now(),
 		//queue:  NewQueue(),
-		Log:   NewLog(),
-		paths: DEFAULT_PATHS,
-		units: make(map[string]*Unit),
+		Log:    NewLog(),
+		paths:  DEFAULT_PATHS,
+		units:  make(map[string]*Unit),
+		loaded: make(map[string]*Unit),
 	}
 }
 
@@ -69,7 +70,8 @@ func (sys *System) Unit(name string) (u *Unit, err error) {
 }
 
 func (sys *System) Get(name string) (u *Unit, err error) {
-	if u, err = sys.Unit(name); err == ErrNotFound {
+	var ok bool
+	if u, ok = sys.loaded[name]; !ok {
 		u, err = sys.Load(name)
 	}
 	return
@@ -207,39 +209,39 @@ func (sys *System) Load(name string) (u *Unit, err error) {
 	if filepath.IsAbs(name) {
 		paths = []string{name}
 	} else {
-		paths := make([]string, len(sys.paths))
-		for i, path := range paths {
-			paths[i] = filepath.Clean(path + "/" + name)
+		paths = make([]string, len(sys.paths))
+		for i, path := range sys.paths {
+			paths[i] = filepath.Join(path, name)
 		}
 	}
 
 	for _, path := range paths {
-		if u, err = sys.load(path); err != nil {
-			if err == os.ErrNotExist {
+		var sup unit.Supervisable
+		if sup, err = parseFile(path); err != nil {
+			if os.IsNotExist(err) {
 				continue
 			}
-			sys.Log.Printf("%s", err)
 		}
-	}
 
-	return nil, ErrNotFound
-}
+		var loaded bool
+		if u, loaded = sys.loaded[name]; loaded {
+			u.Supervisable = sup
+		} else {
+			u = sys.NewUnit(sup)
+			sys.loaded[name] = u
+		}
+		u.path = path
 
-func (sys *System) load(path string) (u *Unit, err error) {
-	var sup unit.Supervisable
-	if sup, err = parseFile(path); err != nil {
+		if err != nil {
+			u.Log.Printf("Error parsing %s: %s", path, err)
+			u.loaded = unit.Error
+			return
+		}
+
+		u.loaded = unit.Loaded
+		sys.units[name] = u
 		return
 	}
 
-	u = sys.NewUnit(sup)
-	u.path = path
-
-	if err != nil {
-		u.Log.Printf("Error parsing definition: %s", err)
-		u.loaded = unit.Error
-		return u, err
-	}
-
-	u.loaded = unit.Loaded
-	return u, err
+	return nil, ErrNotFound
 }
