@@ -88,11 +88,9 @@ func parseDefinition(contents io.Reader, definition interface{}) (err error) { /
 				// reflect.Kind of field in definition
 				switch v.Kind() {
 
-				// string
 				case reflect.String:
 					v.SetString(opt.Value)
 
-				// bool
 				case reflect.Bool:
 					if opt.Value == "yes" {
 						v.SetBool(true)
@@ -100,23 +98,22 @@ func parseDefinition(contents io.Reader, definition interface{}) (err error) { /
 						return ParseErr(opt.Name, errors.New(`Value should be "yes" or "no"`))
 					}
 
-				// []string
-				case reflect.SliceOf(reflect.TypeOf(reflect.String)).Kind():
-					v.Set(reflect.ValueOf(strings.Split(opt.Value, " ")))
+				case reflect.Slice:
+					if _, ok := v.Interface().([]string); ok { // []string
+						v.Set(reflect.ValueOf(strings.Fields(opt.Value)))
 
-				// []int
-				case reflect.SliceOf(reflect.TypeOf(reflect.Int)).Kind():
-					ints := []int{}
-					for _, val := range strings.Split(opt.Value, " ") {
-						if converted, err := strconv.Atoi(val); err == nil {
-							ints = append(ints, converted)
-						} else {
-							return ParseErr(opt.Name, err)
+					} else if _, ok := v.Interface().([]int); ok { // []int
+						ints := []int{}
+						for _, val := range strings.Fields(opt.Value) {
+							if converted, err := strconv.Atoi(val); err == nil {
+								ints = append(ints, converted)
+							} else {
+								return ParseErr(opt.Name, err)
+							}
 						}
+						v.Set(reflect.ValueOf(ints))
 					}
-					v.Set(reflect.ValueOf(ints))
 
-				// unknown
 				default:
 					return ParseErr(opt.Name, ErrUnknownType)
 				}
