@@ -1,5 +1,5 @@
-[![Build Status](https://travis-ci.org/b1101/systemgo.svg?branch=master)](https://travis-ci.org/b1101/systemgo)
-[![Coverage Status](https://coveralls.io/repos/github/b1101/systemgo/badge.svg?branch=master)](https://coveralls.io/github/b1101/systemgo?branch=master)
+[![Build Status](https://travis-ci.org/b1101/systemgo.svg?branch=master&bust=1)](https://travis-ci.org/b1101/systemgo)
+[![Coverage Status](https://coveralls.io/repos/github/b1101/systemgo/badge.svg?branch=master&bust=1)](https://coveralls.io/github/b1101/systemgo?branch=master)
 
 # Description
 An init system in Go, intended to run on [Browsix](https://github.com/plasma-umass/browsix) and other Unix-like OS(GNU/Linux incl.)
