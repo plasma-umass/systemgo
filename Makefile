@@ -2,15 +2,18 @@ COVER_PROFILE=cover.out
 COVER_METHOD=atomic
 COVER_DEFAULT=html
 
-all: deps generate init systemctl test
+all: build test
+build: deps generate init systemctl
 
 deps:
 	go get golang.org/x/tools/cmd/stringer
 	go get github.com/coreos/go-systemd/unit
 	go get -d ./...
 
-testdeps: deps
+coverdeps: deps
 	go get golang.org/x/tools/cmd/cover
+	go get github.com/mattn/goveralls
+	go get github.com/wadey/gocovmerge
 
 generate:
 	go generate ./...
@@ -19,22 +22,16 @@ init: *.go system/*.go unit/*.go lib/test/*.go lib/errors/*.go
 systemctl: systemctl/cmd/*.go systemctl/main.go lib/systemctl/*.go
 	go build -o bin/systemctl ./systemctl
 install:
-	go get -t ./...
+	go get -v ./...
 
-test: testdeps
+test: generate
 	go test ./...
-cover:
-	go test -cover ./...
-
-# Turned out, that go test does not allow getting coverage of multiple packages
-# at once - implement a script as a workaraund?
-#$(COVER_PROFILE): 
-#	go test -covermethod=$(COVER_METHOD) -coverprofile=$(COVER_PROFILE) ./...
-#coverfunc: $(COVER_PROFILE)
-#	go tool cover -func=$(COVER_PROFILE)
-#coverhtml: $(COVER_PROFILE)
-#	go tool cover -html=$(COVER_PROFILE)
-
+cover: coverdeps generate
+	./coverage.sh --html
+coveralls: coverdeps generate 
+	./coverage.sh --coveralls
+travis: coverdeps build
+	./coverage.sh --coveralls travis-ci
 
 clean: cleancover cleanbin cleanstringers
 
