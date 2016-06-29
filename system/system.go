@@ -61,16 +61,9 @@ func (sys *System) SetPaths(paths ...string) {
 //out += fmt.Sprintln(s.Units)
 //}
 
-func (sys *System) Unit(name string) (u *Unit, err error) {
+func (sys *System) Get(name string) (u *Unit, err error) {
 	var ok bool
 	if u, ok = sys.units[name]; !ok {
-		err = ErrNotFound
-	}
-	return
-}
-
-func (sys *System) Get(name string) (u *Unit, err error) {
-	if u, err = sys.Unit(name); err != nil {
 		u, err = sys.Load(name)
 	}
 	return
@@ -104,7 +97,7 @@ func (sys *System) Restart(name string) (err error) {
 
 func (sys *System) Reload(name string) (err error) {
 	var u *Unit
-	if u, err = sys.Unit(name); err != nil {
+	if u, err = sys.Get(name); err != nil {
 		return
 	}
 
@@ -117,7 +110,7 @@ func (sys *System) Reload(name string) (err error) {
 
 func (sys *System) Enable(name string) (err error) {
 	var u *Unit
-	if u, err = sys.Unit(name); err != nil {
+	if u, err = sys.Get(name); err != nil {
 		return
 	}
 	u.Log.Println("enable")
@@ -126,7 +119,7 @@ func (sys *System) Enable(name string) (err error) {
 
 func (sys *System) Disable(name string) (err error) {
 	var u *Unit
-	if u, err = sys.Unit(name); err != nil {
+	if u, err = sys.Get(name); err != nil {
 		return
 	}
 	u.Log.Println("disable")
@@ -147,7 +140,7 @@ func (sys *System) IsEnabled(name string) (st unit.Enable, err error) {
 // If error is returned, it is going to be ErrNotFound
 func (sys *System) IsActive(name string) (st unit.Activation, err error) {
 	var u *Unit
-	if u, err = sys.Unit(name); err == nil {
+	if u, err = sys.Get(name); err == nil {
 		st = u.Active()
 	}
 	return
@@ -157,7 +150,7 @@ func (sys *System) IsActive(name string) (st unit.Activation, err error) {
 // If error is returned, it is going to be ErrNotFound
 func (sys *System) StatusOf(name string) (st unit.Status, err error) {
 	var u *Unit
-	if u, err = sys.Unit(name); err != nil {
+	if u, err = sys.Get(name); err != nil {
 		return
 	}
 

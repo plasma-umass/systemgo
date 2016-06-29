@@ -134,7 +134,7 @@ func (u *Unit) Start() (err error) {
 	// TODO: stop conflicted units before starting(divide jobs and use transactions like systemd?)
 	u.Log.Println("Checking Conflicts...")
 	for _, name := range u.Conflicts() {
-		if dep, _ := u.system.Unit(name); dep != nil && dep.isActive() {
+		if dep, _ := u.system.Get(name); dep != nil && dep.isActive() {
 			return fmt.Errorf("Unit conflicts with %s", name)
 		}
 	}
@@ -142,7 +142,7 @@ func (u *Unit) Start() (err error) {
 	u.Log.Println("Checking Requires...")
 	for _, name := range u.Requires() {
 		var dep *Unit
-		if dep, err = u.system.Unit(name); err != nil {
+		if dep, err = u.system.Get(name); err != nil {
 			return fmt.Errorf("Error loading dependency %s: %s", name, err)
 		}
 
