@@ -1,13 +1,10 @@
-package system
+package systemctl
 
-type Response struct {
-	Yield interface{}
-	Error string
-}
+import "github.com/b1101/systemgo/system"
 
 type Handler func(...string) []Response
 
-func (sys *System) Handlers() map[string]Handler {
+func Handlers(sys system.Daemon) map[string]Handler {
 	return map[string]Handler{
 		"status": func(names ...string) (resp []Response) {
 			if len(names) == 0 {
@@ -39,25 +36,25 @@ func (sys *System) Handlers() map[string]Handler {
 		"reload": func(names ...string) (resp []Response) {
 			return handleEachErr(names, func(string) error {
 				//return sys.Reload(name)
-				return ErrNotImplemented // TODO
+				return system.ErrNotImplemented // TODO
 			})
 		},
 		"enable": func(names ...string) (resp []Response) {
 			return handleEachErr(names, func(name string) error {
 				//return sys.Enable(name)
-				return ErrNotImplemented // TODO
+				return system.ErrNotImplemented // TODO
 			})
 		},
 		"disable": func(names ...string) (resp []Response) {
 			return handleEachErr(names, func(name string) error {
 				//return sys.Disable(name)
-				return ErrNotImplemented // TODO
+				return system.ErrNotImplemented // TODO
 			})
 		},
 		"": func(names ...string) (resp []Response) {
 			return handle(func() (interface{}, error) {
 				//return sys.ListUnits()
-				return nil, ErrNotImplemented // TODO
+				return nil, system.ErrNotImplemented // TODO
 			})
 		},
 	}

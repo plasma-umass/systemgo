@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/b1101/systemgo/lib/systemctl"
 	"github.com/b1101/systemgo/system"
 )
 
@@ -85,8 +86,8 @@ func main() {
 func listenHTTP(addr string) (err error) {
 	server := http.NewServeMux()
 
-	for name, handler := range sys.Handlers() {
-		func(handler system.Handler) {
+	for name, handler := range systemctl.Handlers(sys) {
+		func(handler systemctl.Handler) {
 			server.HandleFunc("/"+name, func(w http.ResponseWriter, req *http.Request) {
 				//msg := []systemctl.Response{}
 				v := req.URL.Query()

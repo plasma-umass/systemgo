@@ -5,14 +5,17 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-
-	"github.com/b1101/systemgo/system"
 )
+
+type Response struct {
+	Yield interface{}
+	Error string
+}
 
 // Splits the system response into yield and error(if any)
 func Parse(response io.Reader) (yield json.RawMessage, err error) {
 	var resp struct {
-		system.Response
+		Response
 		Yield json.RawMessage
 	}
 	if err = json.NewDecoder(response).Decode(&resp); err != nil {
