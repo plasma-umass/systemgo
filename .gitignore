@@ -1,7 +1,9 @@
 /test/testfile
 
 /bin
+/cover.out
 *_string.go
+mock_*_test.go
 
 *~
 
