@@ -59,8 +59,16 @@ var (
 )
 
 func main() {
+	//parseConfig()
+	boot()
+	serve()
+}
+
+// boot initializes the system, sets the default paths, as specified in configuration and attempts to start the default target, falls back to "rescue.target", if it fails
+func boot() {
 	// Initialize system
-	sys = system.New()
+	sys := system.New()
+
 	sys.SetPaths(conf.Paths...)
 
 	// Start the default target
@@ -72,8 +80,10 @@ func main() {
 			log.Printf("Error starting rescue target %s: %s", "rescue.target", err)
 		}
 	}
+}
 
-	// Listen for systemctl requests
+// Listen for systemctl requests
+func serve() {
 	switch conf.Method {
 	case "http":
 		if err := listenHTTP(conf.Port.String()); err != nil {
