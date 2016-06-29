@@ -108,7 +108,7 @@ func (u *Unit) parseDepDir(suffix string) (paths []string, err error) {
 
 	links, err := pathset(dirpath)
 	if err != nil {
-		if err != os.ErrNotExist {
+		if !os.IsNotExist(err) {
 			u.Log.Printf("Error parsing %s: %s", dirpath, err)
 		}
 		return
@@ -126,6 +126,10 @@ func (u *Unit) parseDepDir(suffix string) (paths []string, err error) {
 }
 
 func (u *Unit) Start() (err error) {
+	if Debug {
+		bug.Println("*Unit is ", u)
+	}
+
 	u.loading = make(chan struct{})
 	defer close(u.loading)
 

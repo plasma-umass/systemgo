@@ -19,6 +19,10 @@ type Log struct {
 // NewLog returns a new log
 func NewLog() (l *Log) {
 	defer func() {
+		if Debug {
+			l.Logger = bug
+			return
+		}
 		l.Logger = log.New(l, "", log.LstdFlags)
 	}()
 	return &Log{

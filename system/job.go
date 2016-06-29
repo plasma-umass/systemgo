@@ -47,6 +47,8 @@ func (j *Job) Start() (err error) {
 		return
 	}
 
+	bug.Println("Ordering:", ordering)
+
 	switch j.Type {
 	case start:
 		for _, u := range ordering {
@@ -99,15 +101,23 @@ func (j *Job) order() (ordering []*Unit, err error) {
 		g.before[unit] = map[string]*Unit{}
 
 		for _, depname := range unit.After() {
+			bug.Println(name, " after ", depname)
 			if dep, ok := j.Units[depname]; ok {
 				g.before[unit][depname] = dep
 			}
 		}
 
 		for _, depname := range unit.Before() {
+			bug.Println(name, " before ", depname)
 			if dep, ok := j.Units[depname]; ok {
 				g.before[dep][name] = unit
 			}
+		}
+	}
+
+	if Debug {
+		for name, unit := range j.Units {
+			bug.Printf("Before %s : %v", name, g.before[unit])
 		}
 	}
 
