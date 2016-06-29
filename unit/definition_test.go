@@ -9,8 +9,10 @@ import (
 	"github.com/b1101/systemgo/lib/test"
 )
 
-var TEST_INTS = []int{1, 2, 3}
-var DEFAULT_UNIT = `[Unit]
+var DEFAULT_INTS = []int{1, 2, 3}
+
+const DEFAULT_BOOL = true
+const DEFAULT_UNIT = `[Unit]
 Description=Description
 Documentation=Documentation
 
@@ -24,7 +26,7 @@ After=After
 WantedBy=WantedBy
 RequiredBy=RequiredBy`
 
-func TestParse(t *testing.T) {
+func TestDefinition(t *testing.T) {
 	cases := []struct {
 		def      interface{}
 		correct  bool
@@ -45,17 +47,45 @@ Test=should fail`),
 				Bool bool
 			}
 		}{}, true,
-			//{definition{}, false,
 			strings.NewReader(DEFAULT_UNIT + `
 [Test]
 Ints=1 2 3
 Bool=yes`),
 		},
+		{&struct {
+			definition
+			Test struct {
+				Ints []int
+				Bool bool
+			}
+		}{}, false,
+			strings.NewReader(DEFAULT_UNIT + `
+[Test]
+Ints=1 2 3
+Bool=foo`),
+		},
+		{&struct {
+			definition
+			Test struct {
+				Ints []int
+				Bool bool
+			}
+		}{}, false,
+			strings.NewReader(DEFAULT_UNIT + `
+[Test]
+Ints=a b 3
+Bool=foo`),
+		},
 	}
 
 	for _, c := range cases {
-		if err := parseDefinition(c.contents, c.def); err != nil && c.correct {
-			t.Errorf(test.ErrorIn, "parseDefinition", err)
+		if err := parseDefinition(c.contents, c.def); err != nil {
+			if c.correct {
+				t.Errorf(test.ErrorIn, "parseDefinition", err)
+			}
+			continue
+		} else if !c.correct && err == nil {
+			t.Errorf(test.Nil, "err")
 		}
 
 		defVal := reflect.ValueOf(c.def).Elem()
@@ -76,24 +106,52 @@ Bool=yes`),
 				switch option.Kind() {
 				case reflect.String:
 					if option.String() != option.Name {
-						t.Errorf(test.Mismatch, option, option.Name)
+						t.Errorf(test.MismatchIn, option.Name, option, option.Name)
+					}
+					if m := methodByName(defVal, option.Name).(func() string); m() != option.Name {
+						t.Errorf(test.MismatchIn, option.Name+"()", m(), option.Name)
 					}
 				case reflect.Bool:
-					if option.Bool() != true {
-						t.Errorf(test.MismatchIn, option.Name, option.Bool(), true)
+					if option.Bool() != DEFAULT_BOOL {
+						t.Errorf(test.MismatchInVal, option.Name, option.Bool(), DEFAULT_BOOL)
+					}
+					// Workaround for the non-existent bool getter
+					if defVal.MethodByName(option.Name).IsValid() {
+						if m := methodByName(defVal, option.Name).(func() bool); m() != DEFAULT_BOOL {
+							t.Errorf(test.MismatchInVal, option.Name+"()", m(), DEFAULT_BOOL)
+						}
 					}
 				case reflect.Slice:
-					if slice, ok := option.Interface().([]string); ok {
-						if !reflect.DeepEqual(slice, []string{option.Name}) {
-							t.Errorf(test.MismatchIn, option.Name, slice, []string{option.Name})
+					if slice, ok := interfaceOf(option.Value).([]string); ok {
+						expect := []string{option.Name}
+
+						if !reflect.DeepEqual(slice, expect) {
+							t.Errorf(test.MismatchIn, option.Name, slice, expect)
 						}
-					} else if slice, ok := option.Interface().([]int); ok {
-						if !reflect.DeepEqual(slice, TEST_INTS) {
-							t.Errorf(test.MismatchIn, option.Name, slice, TEST_INTS)
+						if m := methodByName(defVal, option.Name).(func() []string); !reflect.DeepEqual(m(), expect) {
+							t.Errorf(test.MismatchIn, option.Name+"()", m(), expect)
+						}
+					} else if slice, ok := interfaceOf(option.Value).([]int); ok {
+						if !reflect.DeepEqual(slice, DEFAULT_INTS) {
+							t.Errorf(test.MismatchInVal, option.Name, slice, DEFAULT_INTS)
+						}
+						// Workaround for the non-existent []int getter
+						if defVal.MethodByName(option.Name).IsValid() {
+							if m := methodByName(defVal, option.Name).(func() []string); !reflect.DeepEqual(m(), DEFAULT_INTS) {
+								t.Errorf(test.MismatchIn, option.Name+"()", m(), DEFAULT_INTS)
+							}
 						}
 					}
 				}
 			}
 		}
 	}
+}
+
+func interfaceOf(val reflect.Value) interface{} {
+	return val.Interface()
+}
+
+func methodByName(val reflect.Value, name string) interface{} {
+	return interfaceOf(val.MethodByName(name))
 }

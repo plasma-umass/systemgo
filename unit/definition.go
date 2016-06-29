@@ -54,7 +54,7 @@ func (def definition) After() []string {
 
 // After returns a slice of unit names as found in definition
 func (def definition) Before() []string {
-	return def.Unit.After
+	return def.Unit.Before
 }
 
 // RequiredBy returns a slice of unit names as found in definition
@@ -68,7 +68,7 @@ func (def definition) WantedBy() []string {
 }
 
 // ParseDefinition parses the data in Systemd unit-file format and stores the result in value pointed by definition
-func parseDefinition(contents io.Reader, definition interface{}) (err error) { // TODO: find a better name for io.Reader parameter
+func parseDefinition(contents io.Reader, definition interface{}) (err error) {
 	// Access the underlying value of the pointer
 	def := reflect.ValueOf(definition).Elem()
 	if !def.IsValid() || !def.CanSet() {
