@@ -92,14 +92,14 @@ func (j *Job) order() (ordering []*Unit, err error) {
 		map[*Unit]struct{}{},
 		map[*Unit]struct{}{},
 		map[*Unit]map[string]*Unit{},
-		make([]*Unit, len(j.Units)),
+		make([]*Unit, 0, len(j.Units)),
 	}
 
-	ordering = g.ordering
+	for _, unit := range j.Units {
+		g.before[unit] = map[string]*Unit{}
+	}
 
 	for name, unit := range j.Units {
-		g.before[unit] = map[string]*Unit{}
-
 		for _, depname := range unit.After() {
 			bug.Println(name, " after ", depname)
 			if dep, ok := j.Units[depname]; ok {
@@ -127,7 +127,7 @@ func (j *Job) order() (ordering []*Unit, err error) {
 		}
 	}
 
-	return
+	return g.ordering, nil
 }
 func (j *Job) addDeps(u *Unit) (err error) {
 	for _, name := range u.Requires() {
@@ -141,7 +141,11 @@ func (j *Job) addDeps(u *Unit) (err error) {
 			continue
 		}
 
-		err = j.addDeps(dep)
+		if err = j.addDeps(dep); err != nil {
+			continue
+		}
+
+		j.Units[name] = dep
 	}
 
 	if err != nil {
@@ -186,8 +190,10 @@ func (g *graph) traverse(unit *Unit) (err error) {
 		delete(g.visited, dep)
 	}
 
-	g.ordering = append(g.ordering, unit)
-	g.ordered[unit] = struct{}{}
+	if _, has := g.ordered[unit]; !has {
+		g.ordering = append(g.ordering, unit)
+		g.ordered[unit] = struct{}{}
+	}
 
 	return
 }
