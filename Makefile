@@ -23,7 +23,7 @@ build: generate init systemctl
 
 generate: deps
 	go generate ./...
-init: *.go system/*.go unit/*.go lib/test/*.go lib/errors/*.go generate
+init: *.go system/*.go unit/*.go lib/test/*.go generate
 	go build -o bin/init
 systemctl: systemctl/cmd/*.go systemctl/main.go lib/systemctl/*.go generate
 	go build -o bin/systemctl ./systemctl
