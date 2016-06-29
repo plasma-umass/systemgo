@@ -3,20 +3,20 @@ package system
 import "fmt"
 
 type Job struct {
-	Type   jobType
+	Type   JobType
 	Units  map[string]*Unit
 	system *System
 }
 
-type jobType int
+type JobType int
 
 const (
-	start jobType = iota
+	start JobType = iota
 	stop
 	isolate
 )
 
-func (sys *System) NewJob(typ jobType, names ...string) (j *Job, err error) {
+func (sys *System) NewJob(typ JobType, names ...string) (j *Job, err error) {
 	j = &Job{
 		Type:   typ,
 		Units:  map[string]*Unit{},
