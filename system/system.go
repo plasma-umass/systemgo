@@ -70,17 +70,8 @@ func (sys *System) Unit(name string) (u *Unit, err error) {
 }
 
 func (sys *System) Get(name string) (u *Unit, err error) {
-	var ok bool
-	if u, ok = sys.loaded[name]; !ok {
+	if u, err = sys.Unit(name); err != nil {
 		u, err = sys.Load(name)
-	}
-	return
-}
-
-func (sys *System) Loaded(name string) (u *Unit, err error) {
-	var ok bool
-	if u, ok = sys.units[name]; !ok {
-		err = ErrNotFound
 	}
 	return
 }
@@ -201,8 +192,8 @@ func (sys *System) Status() (st Status, err error) {
 
 // Load searches for a definition of unit name in configured paths parses it and returns a unit.Supervisable (or nil) and error if any
 func (sys *System) Load(name string) (u *Unit, err error) {
-	if !unit.SupportedName(name) {
-		return nil, unit.ErrUnknownType
+	if !SupportedName(name) {
+		return nil, ErrUnknownType
 	}
 
 	var paths []string
@@ -216,7 +207,7 @@ func (sys *System) Load(name string) (u *Unit, err error) {
 	}
 
 	for _, path := range paths {
-		var sup unit.Supervisable
+		var sup Supervisable
 		if sup, err = parseFile(path); err != nil {
 			if os.IsNotExist(err) {
 				continue

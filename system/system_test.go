@@ -11,6 +11,8 @@ import (
 	"github.com/b1101/systemgo/lib/test"
 )
 
+//go:generate mockgen -source=../unit/interfaces.go
+
 var cases = map[string][]struct {
 	name     string
 	contents []byte

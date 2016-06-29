@@ -9,7 +9,7 @@ import (
 )
 
 type Unit struct {
-	unit.Supervisable
+	Supervisable
 
 	Log *Log
 
@@ -21,7 +21,7 @@ type Unit struct {
 	loading chan struct{}
 }
 
-func (sys *System) NewUnit(sup unit.Supervisable) (u *Unit) {
+func (sys *System) NewUnit(sup Supervisable) (u *Unit) {
 	return &Unit{
 		Supervisable: sup,
 		Log:          NewLog(),

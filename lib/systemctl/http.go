@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/b1101/systemgo/unit"
+	"github.com/b1101/systemgo/system"
 )
 
 // System communication client using HTTP protocol
@@ -60,7 +60,7 @@ func getHTTP(addr, cmd string, names ...string) (*http.Response, error) {
 	} else {
 		v := url.Values{}
 		for _, name := range names {
-			if !unit.SupportedName(name) {
+			if !system.SupportedName(name) {
 				name += ".service"
 			}
 			v.Add("unit", name)
