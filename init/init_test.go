@@ -1,4 +1,4 @@
-package main
+package init
 
 import (
 	"fmt"
@@ -66,7 +66,7 @@ func populate(path string) (err error) {
 
 			file, err := os.Create(fpath)
 			if err != nil {
-				return fmt.Errorf("os.Create(%s)", fpath, err)
+				return fmt.Errorf("os.Create(%s):%s", fpath, err)
 			}
 			defer file.Close()
 
@@ -100,6 +100,6 @@ func init() {
 
 func TestBoot(t *testing.T) {
 	defer os.RemoveAll(dirpath)
-	boot()
+	Boot()
 	time.Sleep(5 * time.Second)
 }

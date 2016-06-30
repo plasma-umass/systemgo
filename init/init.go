@@ -1,4 +1,4 @@
-package main
+package init
 
 import (
 	"encoding/json"
@@ -38,7 +38,7 @@ func (p Port) String() string {
 
 var (
 	// Instance of a system
-	sys system.Daemon
+	sys *system.Daemon
 
 	// Default configuration
 	conf *config = &config{
@@ -58,16 +58,10 @@ var (
 	}
 )
 
-func main() {
-	//parseConfig()
-	boot()
-	serve()
-}
-
 // boot initializes the system, sets the default paths, as specified in configuration and attempts to start the default target, falls back to "rescue.target", if it fails
-func boot() {
+func Boot() {
 	// Initialize system
-	sys := system.New()
+	sys = system.New()
 
 	sys.SetPaths(conf.Paths...)
 
@@ -83,7 +77,7 @@ func boot() {
 }
 
 // Listen for systemctl requests
-func serve() {
+func Serve() {
 	switch conf.Method {
 	case "http":
 		if err := listenHTTP(conf.Port.String()); err != nil {
