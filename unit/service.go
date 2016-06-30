@@ -33,7 +33,6 @@ type serviceDefinition struct {
 		PIDFile                         string
 		Restart                         string
 		RemainAfterExit                 bool
-		//Type                        ServiceType
 	}
 }
 

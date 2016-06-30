@@ -64,7 +64,7 @@ func TestWrite(t *testing.T) {
 	}
 
 	if l.buffer.Bytes()[0] != char {
-		t.Errorf(test.MismatchIn, "l.buffer.Bytes()[0]", l.buffer.Bytes()[0], char)
+		t.Errorf(test.MismatchIn, "l.buffer.Bytes()[0]", string(l.buffer.Bytes()[0]), string(char))
 	}
 }
 

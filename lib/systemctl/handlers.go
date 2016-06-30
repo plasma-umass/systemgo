@@ -16,7 +16,6 @@ func Handlers(sys system.Daemon) map[string]Handler {
 					return sys.StatusOf(name)
 				})
 			}
-			return
 		},
 		"start": func(names ...string) (resp []Response) {
 			return handleErr(func() error {

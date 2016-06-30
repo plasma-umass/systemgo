@@ -24,7 +24,7 @@ func TestConstructorOfName(t *testing.T) {
 	if err == nil {
 		t.Errorf(test.KnownType, testSuffix)
 	} else if err != ErrUnknownType {
-		t.Errorf(test.Mismatch, "error", err, ErrUnknownType)
+		t.Errorf(test.MismatchIn, "err", err, ErrUnknownType)
 	}
 }
 

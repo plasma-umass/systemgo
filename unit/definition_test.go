@@ -138,7 +138,7 @@ Bool=foo`),
 						// Workaround for the non-existent []int getter
 						if defVal.MethodByName(option.Name).IsValid() {
 							if m := methodByName(defVal, option.Name).(func() []string); !reflect.DeepEqual(m(), DEFAULT_INTS) {
-								t.Errorf(test.MismatchIn, option.Name+"()", m(), DEFAULT_INTS)
+								t.Errorf(test.MismatchInVal, option.Name+"()", m(), DEFAULT_INTS)
 							}
 						}
 					}
