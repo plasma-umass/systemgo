@@ -4,6 +4,7 @@ TEST=lib/test
 UNIT=unit
 SYSTEM=system
 SYSTEMCTL=systemctl
+INIT=init
 
 BINDIR=bin
 
@@ -17,6 +18,7 @@ TRAVIS_MODE=travis-ci
 PKG_SYSTEMGO=$(REPO)
 PKG_TEST=$(REPO)/$(TEST)
 PKG_UNIT=$(REPO)/$(UNIT)
+PKG_INIT=$(REPO)/$(INIT)
 PKG_SYSTEM=$(REPO)/$(SYSTEM)
 PKG_SYSTEMCTL=$(REPO)/$(SYSTEMCTL)
 
@@ -31,18 +33,23 @@ ABS_COVER_PROFILE=$(ABS_REPO)/cover.out
 ABS_SYSTEMGO=$(ABS_REPO)
 ABS_TEST=$(ABS_REPO)/$(TEST)
 ABS_UNIT=$(ABS_REPO)/$(UNIT)
+ABS_INIT=$(ABS_REPO)/$(INIT)
 ABS_SYSTEM=$(ABS_REPO)/$(SYSTEM)
 ABS_SYSTEMCTL=$(ABS_REPO)/$(SYSTEMCTL)
 
-mock_units=mock_system mock_unit
+MOCK_PKGS=mock_system mock_unit
+system_interfaces=Supervisable,Daemon,Manager
+unit_interfaces=Starter,Stopper,StartStopper,Reloader,Subber
 
 all: build test
+
+build: generate vet init systemctl
 
 depend:
 	@echo "Checking build dependencies..."
 	@go get -v golang.org/x/tools/cmd/stringer
 	@go get -v github.com/coreos/go-systemd/unit
-	@go get -v -d ./...
+	@go get -v -d $(REPO)/...
 
 dependtest: dependmock
 
@@ -61,20 +68,17 @@ dependcoverall: dependcover
 	@go get -v github.com/mattn/goveralls
 
 
-build: generate init systemctl
+vet: generate
+	@echo "Running 'go vet'..."
+	@go vet $(REPO)/...
 
 generate: depend
 	@echo "Running 'go generate'..."
 	@go generate -x $(REPO)/...
 
-$(mock_units) test mock cover build: generate
+$(MOCK_PKGS) test cover build: generate
 
-init: *.go system/*.go unit/*.go lib/systemctl/*.go
-	@echo "Building $@..."
-	@go build -o $(ABS_BINDIR)/$@ $(REPO)
-	@echo "$@ built and saved to $(ABS_BINDIR)/$@"
-
-systemctl: systemctl/cmd/*.go systemctl/main.go lib/systemctl/*.go 
+$(INIT) $(SYSTEMCTL): % : $(wildcard %/*.go)
 	@echo "Building $@..."
 	@go build -o $(ABS_BINDIR)/$@ $(REPO)/$@
 	@echo "$@ built and saved to $(ABS_BINDIR)/$@"
@@ -83,19 +87,13 @@ install: build
 	@echo "Installing..."
 	@go get -v $(REPO)/...
 
-mock: dependmock mock_system mock_unit
-	@go get $(PKG_TEST)/...
 
-mock_system: system/interfaces.go
-	@echo "Building $@..."
-	@mkdir -p $(ABS_TEST)/$@
-	@mockgen -destination=$(ABS_TEST)/$@/$@.go -package=$@ $(PKG_SYSTEM) Supervisable,Daemon,Manager
-	@echo "$@ package built and saved to $(ABS_PATH)/$(ABS_TEST)/$@"
+mock: dependmock $(MOCK_PKGS)
 
-mock_unit: unit/interfaces.go
-	@echo "Building $@..."
+$(MOCK_PKGS): mock_%: $(wildcard %/interfaces.go)
+	@echo "Mocking $* interfaces..."
 	@mkdir -p $(ABS_TEST)/$@
-	@mockgen -destination=$(ABS_TEST)/$@/$@.go -package=$@ $(PKG_UNIT) Starter,Stopper,StartStopper,Reloader,Subber
+	@mockgen -destination=$(ABS_TEST)/$@/$@.go -package=$@ $(REPO)/$* $($*_interfaces)
 	@echo "$@ package built and saved to $(ABS_TEST)/$@"
 
 test: dependtest mock 
@@ -115,6 +113,7 @@ travis: dependcoverall build
 	@echo "Starting travis build..."
 	@$(ABS_COVER) --coveralls $(TRAVIS_MODE)
 
+
 clean: cleancover cleanbin cleanstringers cleanmock
 
 cleanbin:
@@ -130,4 +129,4 @@ cleanmock:
 	@echo "Removing mock units..."
 	@-rm -rf `find $(ABS_REPO) -name 'mock_*'`
 
-.PHONY: all generate test dependtest depend cover dependcover systemctl init install clean cleanbin cleanstringers cleancover cleanmock build travis mock_system mock_unit
+.PHONY: all generate test dependtest depend cover dependcover systemctl init install clean cleanbin cleanstringers cleancover cleanmock build travis mock_system mock_unit vet init $(SYSTEMCTL)
