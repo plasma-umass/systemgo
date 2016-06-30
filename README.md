@@ -1,14 +1,13 @@
 [![Build Status](https://travis-ci.org/b1101/systemgo.svg?branch=master&bust=1)](https://travis-ci.org/b1101/systemgo)
 [![Coverage Status](https://coveralls.io/repos/github/b1101/systemgo/badge.svg?branch=master&bust=1)](https://coveralls.io/github/b1101/systemgo?branch=master)
-
+[![GoDoc](https://godoc.org/github.com/b1101/systemgo?status.svg)](https://godoc.org/github.com/b1101/systemgo)
+[![GSoC Project abstract](http://b.repl.ca/v1/GSoC_Project-abstract-orange.png)](https://summerofcode.withgoogle.com/projects/#6227933760847872)
 # Description
 An init system in Go, intended to run on [Browsix](https://github.com/plasma-umass/browsix) and other Unix-like OS(GNU/Linux incl.)
 # Features
 * Fast and concurrent
 * Handles dependencies well
 * [Systemd](https://github.com/Systemd/Systemd)-compatible
-
-_Part of [GSoC project](https://summerofcode.withgoogle.com/projects/#6227933760847872)_
 
 # Milestones
 - [ ] `init` can boot an OS (_approx 05.06.2016_)
