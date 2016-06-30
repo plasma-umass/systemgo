@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/b1101/systemgo/lib/test"
+	"github.com/b1101/systemgo/test"
 )
 
 var DEFAULT_INTS = []int{1, 2, 3}

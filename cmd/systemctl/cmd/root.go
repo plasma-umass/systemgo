@@ -25,8 +25,8 @@ import (
 	"log"
 	"os"
 
-	"github.com/b1101/systemgo/lib/systemctl"
 	"github.com/b1101/systemgo/system"
+	"github.com/b1101/systemgo/systemctl"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )

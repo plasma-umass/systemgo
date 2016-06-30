@@ -5,7 +5,7 @@ import (
 	"io/ioutil"
 	"testing"
 
-	"github.com/b1101/systemgo/lib/test"
+	"github.com/b1101/systemgo/test"
 )
 
 var lorem = []byte(`

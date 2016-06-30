@@ -1,10 +1,10 @@
 REPO=github.com/b1101/systemgo
 
-TEST=lib/test
+TEST=test
 UNIT=unit
 SYSTEM=system
-SYSTEMCTL=systemctl
-INIT=init
+SYSTEMCTL=cmd/systemctl
+INIT=cmd/init
 
 BINDIR=bin
 

@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/b1101/systemgo/lib/test"
 	"github.com/b1101/systemgo/system"
+	"github.com/b1101/systemgo/test"
 )
 
 var units = map[string][]struct {

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/b1101/systemgo/lib/test"
+	"github.com/b1101/systemgo/test"
 )
 
 func TestStatus(t *testing.T) {

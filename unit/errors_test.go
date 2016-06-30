@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/b1101/systemgo/lib/test"
+	"github.com/b1101/systemgo/test"
 )
 
 var ErrTest = errors.New("test")

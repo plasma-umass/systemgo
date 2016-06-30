@@ -20,7 +20,7 @@
 
 package main
 
-import "github.com/b1101/systemgo/systemctl/cmd"
+import "github.com/b1101/systemgo/cmd/systemctl/cmd"
 
 func main() {
 	cmd.Execute()

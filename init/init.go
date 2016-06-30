@@ -6,8 +6,8 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/b1101/systemgo/lib/systemctl"
 	"github.com/b1101/systemgo/system"
+	"github.com/b1101/systemgo/systemctl"
 )
 
 // TODO: introduce proper configuration
