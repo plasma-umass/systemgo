@@ -37,7 +37,6 @@ show_cover_report() {
 }
 
 push_to_coveralls() {
-    echo "Pushing coverage statistics to coveralls.io"
     if [ $# = 0 ]; then
         goveralls -coverprofile="$profile"
     else
