@@ -9,14 +9,14 @@ import (
 )
 
 type Unit struct {
-	Supervisable
+	unit.Interface
 
 	Log *Log
 
 	path   string
 	loaded unit.Load
 
-	system *System
+	Getter
 
 	loading chan struct{}
 }
