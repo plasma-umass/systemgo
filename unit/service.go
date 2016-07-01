@@ -20,13 +20,13 @@ var supportedTypes = map[string]bool{
 
 // Service unit
 type Service struct {
-	serviceDefinition
+	Definition serviceDefinition
 	*exec.Cmd
 }
 
 // Service unit definition
 type serviceDefinition struct {
-	definition
+	Definition
 	Service struct {
 		Type                            string
 		ExecStart, ExecStop, ExecReload string
