@@ -9,13 +9,18 @@ import (
 
 const DEFAULT_SERVICE_TYPE = "simple"
 
-var supportedTypes = map[string]bool{
+var supportedServiceTypes = map[string]bool{
 	"oneshot": true,
 	"simple":  true,
 	"forking": false,
 	"dbus":    false,
 	"notify":  false,
 	"idle":    false,
+}
+
+func SupportedServiceType(typ string) (is bool) {
+	_, is = supportedServiceTypes[typ]
+	return
 }
 
 // Service unit
@@ -36,61 +41,64 @@ type serviceDefinition struct {
 	}
 }
 
-// Parses the definition, checks for errors and returns a new service
-func NewService(definition io.Reader) (service *Service, err error) {
-	service = &Service{}
+// Define attempts to fill the sv definition by parsing r
+func (sv *Service) Define(r io.Reader) (err error) {
+	def := serviceDefinition{}
 
-	// Set defaults
-	service.serviceDefinition.Service.Type = "simple"
+	def.Service.Type = DEFAULT_SERVICE_TYPE
 
-	if err = parseDefinition(definition, &service.serviceDefinition); err != nil {
+	if err = ParseDefinition(r, &def); err != nil {
 		return
 	}
 
-	// Check definition for errors
-	switch def := service.serviceDefinition; {
+	// Check Definition for errors
+	switch {
 	case def.Service.ExecStart == "":
-		err = ParseErr("ExecStart", ErrNotSet)
-	case !supportedTypes[def.Service.Type]:
-		var terr error
-		if _, ok := supportedTypes[def.Service.Type]; !ok {
-			terr = ErrNotExist
-		} else {
-			terr = ErrNotSupported
-		}
-		err = ParseErr("Type", ParseErr(def.Service.Type, terr))
-	default:
-		cmd := strings.Fields(def.Service.ExecStart)
-		service.Cmd = exec.Command(cmd[0], cmd[1:]...)
+		return ParseErr("ExecStart", ErrNotSet)
+
+	case !SupportedServiceType(def.Service.Type):
+		return ParseErr("Type", ParseErr(def.Service.Type, ErrNotSupported))
 	}
+
+	// Only load definition of a unit if it is correct (possibly overwriting existing one)
+	sv.Definition = def
+
+	cmd := strings.Fields(def.Service.ExecStart)
+	sv.Cmd = exec.Command(cmd[0], cmd[1:]...)
+
 	return
 }
 
 // Start executes the command specified in service definition
-func (u *Service) Start() (err error) {
-	switch u.Service.Type {
-	case "simple":
-		err = u.Cmd.Start()
-	case "oneshot":
-		err = u.Cmd.Run()
-	default:
-		err = ErrNotSupported
+func (sv *Service) Start() (err error) {
+	if sv.Cmd == nil {
+		return ErrNotLoaded
 	}
-	return
+	switch sv.Definition.Service.Type {
+	case "simple":
+		return sv.Cmd.Start()
+	case "oneshot":
+		return sv.Cmd.Run()
+	default:
+		return ErrNotSupported
+	}
 }
 
 // Stop stops execution of the command specified in service definition
-func (u *Service) Stop() (err error) {
-	return u.Process.Kill()
+func (sv *Service) Stop() (err error) {
+	if sv.Cmd == nil {
+		return ErrNotLoaded
+	}
+	return sv.Process.Kill()
 }
 
 // Active reports activation status of a service
-func (u Service) Active() Activation {
+func (sv Service) Active() Activation {
 	switch {
-	case u.Cmd == nil, u.ProcessState == nil:
+	case sv.Cmd == nil, sv.ProcessState == nil:
 		return Inactive
-	case u.ProcessState.Success():
-		switch u.Service.Type {
+	case sv.ProcessState.Success():
+		switch sv.Definition.Service.Type {
 		case "oneshot":
 			return Active
 		case "simple":
@@ -98,7 +106,7 @@ func (u Service) Active() Activation {
 		default:
 			return Failed
 		}
-	case u.ProcessState.Exited():
+	case sv.ProcessState.Exited():
 		return Failed
 	default:
 		return Inactive
@@ -106,7 +114,7 @@ func (u Service) Active() Activation {
 }
 
 // Sub reports the sub status of a service
-func (u Service) Sub() string {
+func (sv Service) Sub() string {
 	//return fmt.Sprint(Dead) // TODO: fix
 	return "TODO: implement"
 }
