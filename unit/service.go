@@ -1,4 +1,3 @@
-// Package service defines a service unit type
 package unit
 
 import (
