@@ -1,4 +1,4 @@
-package unit
+package unit_test
 
 import (
 	"errors"
@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/b1101/systemgo/test"
+	"github.com/b1101/systemgo/unit"
 )
 
 var ErrTest = errors.New("test")
@@ -13,7 +14,7 @@ var source = "test"
 var expected = fmt.Sprintf("%s: %s", source, ErrTest)
 
 func TestParseErr(t *testing.T) {
-	pe := ParseErr(source, ErrTest)
+	pe := unit.ParseErr(source, ErrTest)
 
 	if pe.Source != "test" {
 		t.Errorf(test.MismatchIn, "pe.Source", pe.Source, source)

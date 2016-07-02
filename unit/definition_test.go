@@ -1,4 +1,4 @@
-package unit
+package unit_test
 
 import (
 	"io"
@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/b1101/systemgo/test"
+	"github.com/b1101/systemgo/unit"
 )
 
 var DEFAULT_INTS = []int{1, 2, 3}
@@ -32,16 +33,16 @@ func TestDefinition(t *testing.T) {
 		correct  bool
 		contents io.Reader
 	}{
-		{&definition{}, true,
+		{&unit.Definition{}, true,
 			strings.NewReader(DEFAULT_UNIT),
 		},
-		{&definition{}, false,
+		{&unit.Definition{}, false,
 			strings.NewReader(DEFAULT_UNIT + `
 Wrong=Field
 Test=should fail`),
 		},
 		{&struct {
-			definition
+			unit.Definition
 			Test struct {
 				Ints []int
 				Bool bool
@@ -53,7 +54,7 @@ Ints=1 2 3
 Bool=yes`),
 		},
 		{&struct {
-			definition
+			unit.Definition
 			Test struct {
 				Ints []int
 				Bool bool
@@ -65,7 +66,7 @@ Ints=1 2 3
 Bool=foo`),
 		},
 		{&struct {
-			definition
+			unit.Definition
 			Test struct {
 				Ints []int
 				Bool bool
@@ -79,9 +80,9 @@ Bool=foo`),
 	}
 
 	for _, c := range cases {
-		if err := parseDefinition(c.contents, c.def); err != nil {
+		if err := unit.ParseDefinition(c.contents, c.def); err != nil {
 			if c.correct {
-				t.Errorf(test.ErrorIn, "parseDefinition", err)
+				t.Errorf(test.ErrorIn, "ParseDefinition", err)
 			}
 			continue
 		} else if !c.correct && err == nil {

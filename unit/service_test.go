@@ -1,44 +1,49 @@
-package unit
+package unit_test
 
 import (
 	"strings"
 	"testing"
 
 	"github.com/b1101/systemgo/test"
+	"github.com/b1101/systemgo/unit"
 )
 
 func TestNewService(t *testing.T) {
-	sv, err := NewService(strings.NewReader(`[Service]
+	sv := unit.Service{}
+
+	err := sv.Define(strings.NewReader(`[Service]
 ExecStart=/bin/echo test`))
 	if err != nil {
-		t.Errorf(test.ErrorIn, "NewService", err)
+		t.Errorf(test.ErrorIn, "sv.Define", err)
 	}
 
-	if sv.Service.Type != DEFAULT_SERVICE_TYPE {
-		t.Errorf(test.MismatchIn, "sv.Service.Type", sv.Service.Type, DEFAULT_SERVICE_TYPE)
+	if sv.Definition.Service.Type != unit.DEFAULT_SERVICE_TYPE {
+		t.Errorf(test.MismatchIn, "sv.Definition.Service.Type", sv.Definition.Service.Type, unit.DEFAULT_SERVICE_TYPE)
 	}
 
-	func() {
-		if _, err = NewService(strings.NewReader(`[Service]`)); err != nil {
-			if pe, ok := err.(ParseError); ok {
-				if pe.Source == "ExecStart" && pe.Err == ErrNotSet {
-					return
-				}
-				t.Errorf(test.MismatchIn, "pe.Err", pe.Err, ErrNotSet)
+	sv = unit.Service{}
+
+	if err = sv.Define(strings.NewReader(`[Service]`)); err != nil {
+		if pe, ok := err.(unit.ParseError); ok {
+			if pe.Source == "ExecStart" && pe.Err == unit.ErrNotSet {
+				return
 			}
-			t.Errorf(test.MismatchInType, "err", err, ParseError{})
+			t.Errorf(test.MismatchIn, "pe.Err", pe.Err, unit.ErrNotSet)
 		}
-		t.Errorf(test.NotDetected, "empty ExecStart field")
-	}()
+		t.Errorf(test.MismatchInType, "err", err, unit.ParseError{})
+	}
+	t.Errorf(test.NotDetected, "empty ExecStart field")
 }
 
 // Simple service type test
-func TestSimple(t *testing.T) {
-	sv, err := NewService(strings.NewReader(`[Service]
+func TestSimpleService(t *testing.T) {
+	sv := unit.Service{}
+
+	err := sv.Define(strings.NewReader(`[Service]
 ExecStart=/bin/sleep 5
 Type=simple`))
 	if err != nil {
-		t.Errorf(test.ErrorIn, "NewService", err)
+		t.Errorf(test.ErrorIn, "sv.Define", err)
 	}
 
 	if err = sv.Start(); err != nil {
@@ -51,12 +56,14 @@ Type=simple`))
 }
 
 // Oneshot service type test
-func TestOneshot(t *testing.T) {
-	sv, err := NewService(strings.NewReader(`[Service]
+func TestOneshotService(t *testing.T) {
+	sv := unit.Service{}
+
+	err := sv.Define(strings.NewReader(`[Service]
 ExecStart=/bin/echo oneshot
 Type=oneshot`))
 	if err != nil {
-		t.Errorf(test.ErrorIn, "NewService", err)
+		t.Errorf(test.ErrorIn, "unit.NewService", err)
 	}
 
 	if err = sv.Start(); err != nil {
