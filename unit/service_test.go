@@ -8,6 +8,12 @@ import (
 	"github.com/b1101/systemgo/unit"
 )
 
+func TestSupportedSimple(t *testing.T) {
+	if !unit.SupportedService("simple") {
+		t.Errorf(test.MismatchVal, false, true)
+	}
+}
+
 func TestNewService(t *testing.T) {
 	sv := unit.Service{}
 
@@ -24,13 +30,16 @@ ExecStart=/bin/echo test`))
 	sv = unit.Service{}
 
 	if err = sv.Define(strings.NewReader(`[Service]`)); err != nil {
-		if pe, ok := err.(unit.ParseError); ok {
-			if pe.Source == "ExecStart" && pe.Err == unit.ErrNotSet {
-				return
+		if me, ok := err.(unit.MultiError); ok {
+			if pe, ok := me[0].(unit.ParseError); ok {
+				if pe.Source == "ExecStart" && pe.Err == unit.ErrNotSet {
+					return
+				}
+				t.Errorf(test.MismatchIn, "pe.Err", pe.Err, unit.ErrNotSet)
 			}
-			t.Errorf(test.MismatchIn, "pe.Err", pe.Err, unit.ErrNotSet)
+			t.Errorf(test.MismatchInType, "err", err, unit.ParseError{})
 		}
-		t.Errorf(test.MismatchInType, "err", err, unit.ParseError{})
+		t.Errorf(test.MismatchInType, "err", err, unit.MultiError{})
 	}
 	t.Errorf(test.NotDetected, "empty ExecStart field")
 }
@@ -38,6 +47,8 @@ ExecStart=/bin/echo test`))
 // Simple service type test
 func TestSimpleService(t *testing.T) {
 	sv := unit.Service{}
+
+	sv.Definition.Service.ExecStart = "/bin/sleep 5"
 
 	err := sv.Define(strings.NewReader(`[Service]
 ExecStart=/bin/sleep 5

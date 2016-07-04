@@ -2,11 +2,13 @@ package test
 
 const Mismatch = "\ngot:\n%s\n\nexpected:\n%s\n"
 const MismatchVal = "\ngot:\n%v\n\nexpected:\n%v\n"
+const MismatchPtr = "\ngot:\n%p\n\nexpected:\n%p\n"
 const MismatchType = "\ngot:\n%T\n\nexpected:\n%T\n"
 
 const MismatchIn = mismatchIn + Mismatch
 const MismatchInVal = mismatchIn + MismatchVal
 const MismatchInType = mismatchIn + MismatchType
+const MismatchInPtr = mismatchIn + MismatchPtr
 
 const Nil = "%s is nil\n"
 

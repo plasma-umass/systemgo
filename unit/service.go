@@ -1,12 +1,15 @@
 package unit
 
 import (
+	"errors"
 	"io"
 	"os/exec"
 	"strings"
 )
 
 const DEFAULT_SERVICE_TYPE = "simple"
+
+var ErrNotStarted = errors.New("Service not started")
 
 var supportedServiceTypes = map[string]bool{
 	"oneshot": true,
@@ -17,61 +20,67 @@ var supportedServiceTypes = map[string]bool{
 	"idle":    false,
 }
 
-func SupportedServiceType(typ string) (is bool) {
+func SupportedService(typ string) (is bool) {
 	_, is = supportedServiceTypes[typ]
 	return
 }
 
 // Service unit
 type Service struct {
-	Definition serviceDefinition
-	*exec.Cmd
-}
-
-// Service unit definition
-type serviceDefinition struct {
-	Definition
-	Service struct {
-		Type                            string
-		ExecStart, ExecStop, ExecReload string
-		PIDFile                         string
-		Restart                         string
-		RemainAfterExit                 bool
+	Definition struct {
+		Definition
+		Service struct {
+			Type                            string
+			ExecStart, ExecStop, ExecReload string
+			PIDFile                         string
+			Restart                         string
+			RemainAfterExit                 bool
+		}
 	}
+
+	*exec.Cmd
 }
 
 // Define attempts to fill the sv definition by parsing r
 func (sv *Service) Define(r io.Reader) (err error) {
-	def := serviceDefinition{}
+	service := Service{}
 
+	def := &service.Definition
 	def.Service.Type = DEFAULT_SERVICE_TYPE
 
-	if err = ParseDefinition(r, &def); err != nil {
+	if err = ParseDefinition(r, def); err != nil {
 		return
 	}
 
-	// Check Definition for errors
+	merr := MultiError{}
+
+	// Check definition for errors
 	switch {
 	case def.Service.ExecStart == "":
-		return ParseErr("ExecStart", ErrNotSet)
+		merr = append(merr, ParseErr("ExecStart", ErrNotSet))
 
-	case !SupportedServiceType(def.Service.Type):
-		return ParseErr("Type", ParseErr(def.Service.Type, ErrNotSupported))
+	case !SupportedService(def.Service.Type):
+		merr = append(merr, ParseErr("Type", ParseErr(def.Service.Type, ErrNotSupported)))
 	}
 
-	// Only load definition of a unit if it is correct (possibly overwriting existing one)
-	sv.Definition = def
+	if len(merr) > 0 {
+		return merr
+	}
 
-	cmd := strings.Fields(def.Service.ExecStart)
-	sv.Cmd = exec.Command(cmd[0], cmd[1:]...)
+	*sv = service
 
-	return
+	return nil
+}
+
+func parseCommand(ExecStart string) *exec.Cmd {
+	cmd := strings.Fields(ExecStart)
+	return exec.Command(cmd[0], cmd[1:]...)
 }
 
 // Start executes the command specified in service definition
 func (sv *Service) Start() (err error) {
 	if sv.Cmd == nil {
-		return ErrNotLoaded
+		sv.Cmd = parseCommand(sv.Definition.Service.ExecStart)
 	}
 	switch sv.Definition.Service.Type {
 	case "simple":
@@ -86,7 +95,7 @@ func (sv *Service) Start() (err error) {
 // Stop stops execution of the command specified in service definition
 func (sv *Service) Stop() (err error) {
 	if sv.Cmd == nil {
-		return ErrNotLoaded
+		return ErrNotStarted
 	}
 	return sv.Process.Kill()
 }
