@@ -1,9 +1,9 @@
 package unit
 
-// Interface represents a unit, which an instance of system.Interface is capable of supervising
-type Interface interface {
-	StartStopper
-	Subber
+import "io"
+
+type Definer interface {
+	Define(io.Reader) error
 }
 
 // Subber is implemented by any value that has Sub and Active methods

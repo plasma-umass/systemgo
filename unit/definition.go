@@ -68,16 +68,17 @@ func (def Definition) WantedBy() []string {
 }
 
 // ParseDefinition parses the data in Systemd unit-file format and stores the result in value pointed by Definition
-func ParseDefinition(contents io.Reader, definition interface{}) (err error) {
+func ParseDefinition(r io.Reader, v interface{}) (err error) {
 	// Access the underlying value of the pointer
-	def := reflect.ValueOf(definition).Elem()
+	def := reflect.ValueOf(v).Elem()
+
 	if !def.IsValid() || !def.CanSet() {
-		return errors.New("Wrong value received")
+		return ErrWrongVal
 	}
 
 	// Deserialized options
 	var opts []*unit.UnitOption
-	if opts, err = unit.Deserialize(contents); err != nil {
+	if opts, err = unit.Deserialize(r); err != nil {
 		return
 	}
 

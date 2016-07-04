@@ -27,7 +27,7 @@ After=After
 WantedBy=WantedBy
 RequiredBy=RequiredBy`
 
-func TestDefinition(t *testing.T) {
+func TestParseDefinition(t *testing.T) {
 	cases := []struct {
 		def      interface{}
 		correct  bool

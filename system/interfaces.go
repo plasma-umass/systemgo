@@ -2,16 +2,19 @@ package system
 
 import (
 	"fmt"
-	"io"
 
 	"github.com/b1101/systemgo/unit"
 )
 
 // Supervisable represents anything that can be supervised by an instance of a system.Interface
 type Supervisable interface {
-	unit.Interface
+	unit.StartStopper
+	unit.Subber
+	unit.Definer
 
-	Statuser
+	//Statuser
+
+	//definition
 }
 
 // Statuser is implemented by anything that can report its' own status
@@ -62,4 +65,18 @@ type Loader interface {
 // takes an io.Reader and returns a unit.Interface
 type Parser interface {
 	Parse(io.Reader) (unit.Interface, error)
+type definition interface {
+	Description() string
+	Documentation() string
+
+	Wants() []string
+	Requires() []string
+
+	After() []string
+	Before() []string
+
+	Conflicts() []string
+
+	RequiredBy() []string
+	WantedBy() []string
 }

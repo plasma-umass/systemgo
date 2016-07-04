@@ -11,6 +11,7 @@ var ErrNotSupported = errors.New("Not supported")
 var ErrUnknownType = errors.New("Unknown type")
 var ErrPathNotAbs = errors.New("Path specified is not absolute")
 var ErrNotLoaded = errors.New("Unit definition is not loaded properly")
+var ErrWrongVal = errors.New("Wrong value received")
 
 type ParseError struct {
 	Source string

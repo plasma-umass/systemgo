@@ -4,12 +4,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
+	"sync"
 
 	"github.com/b1101/systemgo/unit"
 )
 
 type Unit struct {
-	unit.Interface
+	Supervisable
 
 	Log *Log
 
@@ -21,9 +23,14 @@ type Unit struct {
 	loading chan struct{}
 }
 
-func (sys *System) NewUnit(sup Supervisable) (u *Unit) {
+
+
+
+
+
+func NewUnit(v Supervisable) (u *Unit) {
 	return &Unit{
-		Supervisable: sup,
+		Supervisable: v,
 		Log:          NewLog(),
 
 		system:  sys,
@@ -31,58 +38,114 @@ func (sys *System) NewUnit(sup Supervisable) (u *Unit) {
 	}
 }
 
-func (u Unit) Path() string {
+func (u *Unit) Path() string {
 	return u.path
 }
-func (u Unit) Loaded() unit.Load {
+func (u *Unit) Loaded() unit.Load {
 	return u.loaded
 }
-func (u Unit) Description() string {
-	if u.Supervisable == nil {
-		return ""
-	}
 
-	return u.Supervisable.Description()
+func (u *Unit) Status() fmt.Stringer {
+	st := unit.Status{
+		Load: unit.LoadStatus{
+			Path:   u.Path(),
+			Loaded: u.Loaded(),
+			State:  unit.Enabled,
+		},
+		Activation: unit.ActivationStatus{
+			State: u.Active(),
+			Sub:   u.Sub(),
+		},
+	}
+	// TODO deal with different unit types requiring different status
+	// something like u.Interface.HasX() ?
+	switch u.Supervisable.(type) {
+	//case *unit.Service:
+	//return unit.ServiceStatus{st}
+	default:
+		return st
+	}
 }
 
-func (u Unit) Active() unit.Activation {
+func (u *Unit) Active() unit.Activation {
 	if u.Supervisable == nil {
 		return unit.Inactive
+	} else {
+		return u.Supervisable.Active()
 	}
-
-	if u.loading != nil {
-		return unit.Activating
-	}
-
-	if subber, ok := u.Supervisable.(unit.Subber); ok {
-		return subber.Active()
-	}
-
-	for _, name := range u.Requires() {
-		if dep, err := u.system.Get(name); err != nil || !dep.isActive() {
-			return unit.Inactive
-		}
-	}
-
-	return unit.Active
 }
 
-func (u Unit) Sub() string {
+func (u *Unit) Sub() string {
 	if u.Supervisable == nil {
 		return "dead"
+	} else {
+		return u.Supervisable.Sub()
 	}
-
-	if subber, ok := u.Supervisable.(unit.Subber); ok {
-		return subber.Sub()
-	}
-
-	return u.Active().String()
 }
 
-func (u *Unit) Requires() (names []string) {
-	if u.Supervisable != nil {
-		names = u.Supervisable.Requires()
+// Description returns a string as found in Definition
+func (u *Unit) Description() (description string) {
+	if u.Supervisable == nil {
+		return
 	}
+	return u.definition().Description()
+}
+
+// Documentation returns a string as found in definition
+func (u *Unit) Documentation() (documentation string) {
+	if u.Supervisable == nil {
+		return
+	}
+	return u.definition().Documentation()
+}
+
+// Conflicts returns a slice of unit names as found in definition
+func (u *Unit) Conflicts() (names []string) {
+	if u.Supervisable == nil {
+		return
+	}
+	return u.definition().Conflicts()
+}
+
+// After returns a slice of unit names as found in definition
+func (u *Unit) After() (names []string) {
+	if u.Supervisable == nil {
+		return
+	}
+	return u.definition().After()
+}
+
+// Before returns a slice of unit names as found in definition
+func (u *Unit) Before() (names []string) {
+	if u.Supervisable == nil {
+		return
+	}
+	return u.definition().Before()
+}
+
+// RequiredBy returns a slice of unit names as found in definition
+func (u *Unit) RequiredBy() (names []string) {
+	if u.Supervisable == nil {
+		return
+	}
+	return u.definition().RequiredBy()
+}
+
+// WantedBy returns a slice of unit names as found in definition
+func (u *Unit) WantedBy() (names []string) {
+	if u.Supervisable == nil {
+		return
+	}
+	return u.definition().WantedBy()
+}
+
+// Requires returns a slice of unit names as found in definition and absolute paths
+// of units symlinked in units '.wants' directory
+func (u *Unit) Requires() (names []string) {
+	if u.Supervisable == nil {
+		return
+	}
+	names = u.definition().Requires()
 
 	if paths, err := u.parseDepDir(".requires"); err == nil {
 		names = append(names, paths...)
@@ -91,9 +154,11 @@ func (u *Unit) Requires() (names []string) {
 	return
 }
 
+// Wants returns a slice of unit names as found in definition and absolute paths
+// of units symlinked in units '.wants' directory
 func (u *Unit) Wants() (names []string) {
 	if u.Supervisable != nil {
-		names = u.Supervisable.Wants()
+		names = u.definition().Wants()
 	}
 
 	if paths, err := u.parseDepDir(".wants"); err == nil {
@@ -101,6 +166,18 @@ func (u *Unit) Wants() (names []string) {
 	}
 
 	return
+}
+
+// definition returns pointer to the definition of u
+// Assumes that u has a "Definition" field, which implements definition
+func (u *Unit) definition() (d definition) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Fatalln(r)
+		}
+	}()
+
+	return reflect.ValueOf(u).Elem().FieldByName("Definition").Addr().Interface().(definition)
 }
 
 func (u *Unit) parseDepDir(suffix string) (paths []string, err error) {
