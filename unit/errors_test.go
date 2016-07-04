@@ -28,3 +28,21 @@ func TestParseErr(t *testing.T) {
 		t.Errorf(test.MismatchIn, "pe.Error()", pe.Error(), expected)
 	}
 }
+
+var errCount = 5
+
+func TestMultiErr(t *testing.T) {
+	me := unit.MultiError{}
+
+	for i := 0; i < errCount; i++ {
+		me = append(me, ErrTest)
+	}
+	if len(me) != errCount {
+		t.Errorf(test.MismatchInVal, "len(me)", len(me), errCount)
+	}
+	for i, msg := range me.Errors() {
+		if msg != me[i].Error() {
+			t.Errorf(test.MismatchIn, "me.Errors()", msg, me[i].Error())
+		}
+	}
+}

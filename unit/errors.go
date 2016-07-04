@@ -28,3 +28,20 @@ func ParseErr(source string, err error) ParseError {
 func (err ParseError) Error() string {
 	return fmt.Sprintf("%s: %s", err.Source, err.Err)
 }
+
+type MultiError []error
+
+func (m MultiError) Errors() (errs []string) {
+	errs = make([]string, len(m))
+	for i, err := range m {
+		errs[i] = err.Error()
+	}
+	return
+}
+
+func (m MultiError) Error() string {
+	if len(m) == 0 {
+		return "No errors"
+	}
+	return fmt.Sprintf("%d errors encountered, first: %s", len(m), m[0])
+}
