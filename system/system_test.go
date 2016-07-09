@@ -112,26 +112,47 @@ func TestLoad(t *testing.T) {
 				loaded++
 				defer testPtr(unit.name, ptr)
 			}
+func TestSuported(t *testing.T) {
+	for suffix, is := range supported {
+		if Supported("foo"+suffix) != is {
+			t.Errorf(test.NotSupported, suffix)
 		}
 	}
 
-	fpath := filepath.Join(os.TempDir(), "link.target")
+	if Supported("foo.wrong") {
+		t.Errorf(test.Supported, ".wrong")
+	}
+}
 
-	err = ioutil.WriteFile(fpath, []byte(`[Unit]
-Description=linked unit`), 0666)
+func TestPathset(t *testing.T) {
+	path, err := ioutil.TempDir("", "pathset-test")
 	if err != nil {
-		log.Fatalf(test.ErrorIn, "ioutil.WriteFile", err)
+		t.Fatalf("Error creating dir: %s", err)
+	}
+	defer os.RemoveAll(path)
+
+	cases := []string{
+		"foo.service",
+		"foo.mount",
+		"foo.socket",
+		"foo.target",
+		"foo.wrong",
 	}
 
-	if ptr, err := sys.Load(fpath); err != nil {
-		t.Errorf(test.ErrorIn, "sys.Load("+fpath+")", err)
-	} else {
-		defer testPtr(fpath, ptr)
+	correct := 0
+	for _, name := range cases {
+		if err = ioutil.WriteFile(filepath.Join(path, name), []byte{}, 0666); err != nil {
+			t.Fatalf(test.ErrorIn, "ioutil.WriteFile", err)
+		}
+
+		if Supported(name) {
+			correct++
+		}
 	}
 
-	loaded++
-
-	if len(sys.units) != loaded {
-		t.Errorf(test.MismatchInVal, "len(sys.units)", len(sys.units), loaded)
+	if paths, err := pathset(path); err != nil {
+		t.Fatalf(test.ErrorIn, "pathset", err)
+	} else if len(paths) != correct {
+		t.Errorf(test.MismatchInVal, "len(paths)", len(paths), correct)
 	}
 }

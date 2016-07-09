@@ -169,6 +169,10 @@ func (sys *System) StatusOf(name string) (st unit.Status, err error) {
 	st.Log, err = ioutil.ReadAll(u.Log)
 
 	return
+// Supported returns a bool indicating if filename represents a unit type,
+// which is supported by Systemgo
+func Supported(filename string) bool {
+	return SupportedSuffix(filepath.Ext(filename))
 }
 
 // Status returns status of the system
@@ -177,8 +181,19 @@ func (sys *System) Status() (st Status, err error) {
 		State: sys.state,
 		Since: sys.since,
 	}
+var supported = map[string]bool{
+	".service": true,
+	".target":  true,
+	".mount":   false,
+	".socket":  false,
+}
 
 	st.Log, err = ioutil.ReadAll(sys.Log)
+// SupportedSuffix returns a bool indicating if suffix represents a unit type,
+// which is supported by Systemgo
+func SupportedSuffix(suffix string) bool {
+	return supported[suffix]
+}
 
 	return
 }
@@ -228,4 +243,33 @@ func (sys *System) Load(name string) (u *Unit, err error) {
 	}
 
 	return nil, ErrNotFound
+}
+// pathset returns a slice of paths to definitions of supported unit types found in path specified
+func pathset(path string) (definitions []string, err error) {
+	var file *os.File
+	if file, err = os.Open(path); err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	var info os.FileInfo
+	if info, err = file.Stat(); err != nil {
+		return nil, err
+	} else if !info.IsDir() {
+		return nil, ErrNotDir
+	}
+
+	var names []string
+	if names, err = file.Readdirnames(0); err != nil {
+		return nil, err
+	}
+
+	definitions = make([]string, 0, len(names))
+	for _, name := range names {
+		if Supported(name) {
+			definitions = append(definitions, filepath.Clean(path+"/"+name))
+		}
+	}
+
+	return
 }

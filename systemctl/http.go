@@ -60,7 +60,7 @@ func getHTTP(addr, cmd string, names ...string) (*http.Response, error) {
 	} else {
 		v := url.Values{}
 		for _, name := range names {
-			if !system.SupportedName(name) {
+			if !system.Supported(name) {
 				name += ".service"
 			}
 			v.Add("unit", name)
