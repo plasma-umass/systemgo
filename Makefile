@@ -38,7 +38,7 @@ ABS_SYSTEM=$(ABS_REPO)/$(SYSTEM)
 ABS_SYSTEMCTL=$(ABS_REPO)/$(SYSTEMCTL)
 
 MOCK_PKGS=mock_system mock_unit
-system_interfaces=Supervisable,Daemon,Manager
+system_interfaces=Supervisable,Manager
 unit_interfaces=Starter,Stopper,StartStopper,Reloader,Subber
 
 all: build test
@@ -78,7 +78,7 @@ generate: depend
 
 $(MOCK_PKGS) test cover build: generate
 
-$(INIT) $(SYSTEMCTL): % : $(wildcard %/*.go)
+init systemctl: % : $(wildcard cmd/%/*.go)
 	@echo "Building $@..."
 	@go build -o $(ABS_BINDIR)/$@ $(REPO)/$@
 	@echo "$@ built and saved to $(ABS_BINDIR)/$@"
@@ -109,7 +109,7 @@ coveralls: dependcoverall
 	@$(ABS_COVER) --coveralls
 
 
-travis: dependcoverall build
+travis: dependcoverall build mock
 	@echo "Starting travis build..."
 	@$(ABS_COVER) --coveralls $(TRAVIS_MODE)
 
@@ -129,4 +129,4 @@ cleanmock:
 	@echo "Removing mock units..."
 	@-rm -rf `find $(ABS_REPO) -name 'mock_*'`
 
-.PHONY: all generate test dependtest depend cover dependcover systemctl init install clean cleanbin cleanstringers cleancover cleanmock build travis mock_system mock_unit vet init $(SYSTEMCTL)
+.PHONY: all generate test dependtest depend cover dependcover systemctl init install clean cleanbin cleanstringers cleancover cleanmock build travis mock_system mock_unit vet init cmd/init cmd/systemctl $(SYSTEMCTL)
