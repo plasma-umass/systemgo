@@ -1,7 +1,9 @@
 package system
 
 import (
+	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -9,6 +11,8 @@ import (
 
 	"github.com/b1101/systemgo/unit"
 )
+
+var ErrIsLoading = errors.New("Unit is already loading")
 
 type Unit struct {
 	Supervisable
@@ -18,23 +22,20 @@ type Unit struct {
 	path   string
 	loaded unit.Load
 
-	Getter
+	requires map[string]dependency
 
 	loading chan struct{}
 }
 
-
-
-
-
+type dependency interface {
+	unit.Subber
+	Wait()
+}
 
 func NewUnit(v Supervisable) (u *Unit) {
 	return &Unit{
 		Supervisable: v,
 		Log:          NewLog(),
-
-		system:  sys,
-		loading: make(chan struct{}),
 	}
 }
 
@@ -168,6 +169,64 @@ func (u *Unit) Wants() (names []string) {
 	return
 }
 
+func (u *Unit) Start() (err error) {
+	if u.Supervisable == nil {
+		return ErrNotLoaded
+	} else if u.isLoading() {
+		return ErrIsLoading
+	}
+
+	u.Log.Println("Starting...")
+
+	u.loading = make(chan struct{})
+	defer func() {
+		close(u.loading)
+		u.loading = nil
+	}()
+
+	wg := &sync.WaitGroup{}
+	for name, dep := range u.requires {
+		name, dep := name, dep
+		wg.Add(1)
+		go func( /*name string, unit unit.Subber*/ ) {
+			defer wg.Done()
+			dep.Wait()
+			if dep.Active() != unit.Active {
+				u.Log.Printf("Dependency %s failed to start", name)
+				err = ErrDepFail
+			}
+		}( /*name, unit*/ )
+	}
+
+	wg.Wait()
+	if err != nil {
+		return
+	}
+
+	return u.Supervisable.Start()
+}
+func (u *Unit) Stop() (err error) {
+	if u.Supervisable == nil {
+		return ErrNotLoaded
+	}
+
+	return u.Supervisable.Stop()
+}
+func (u *Unit) Wait() {
+	if u.loading == nil {
+		return
+	}
+	<-u.loading
+	return
+}
+
+func (u *Unit) isActive() bool {
+	return u.Active() == unit.Active
+}
+func (u *Unit) isLoading() bool {
+	return u.loading == nil
+}
+
 // definition returns pointer to the definition of u
 // Assumes that u has a "Definition" field, which implements definition
 func (u *Unit) definition() (d definition) {
@@ -199,62 +258,5 @@ func (u *Unit) parseDepDir(suffix string) (paths []string, err error) {
 		}
 		paths = append(paths, path)
 	}
-	return
-}
-
-func (u *Unit) Start() (err error) {
-	if Debug {
-		bug.Println("*Unit is ", u)
-	}
-
-	u.loading = make(chan struct{})
-	defer close(u.loading)
-
-	u.Log.Println("Starting unit...")
-
-	// TODO: stop conflicted units before starting(divide jobs and use transactions like systemd?)
-	u.Log.Println("Checking Conflicts...")
-	for _, name := range u.Conflicts() {
-		if dep, _ := u.system.Get(name); dep != nil && dep.isActive() {
-			return fmt.Errorf("Unit conflicts with %s", name)
-		}
-	}
-
-	u.Log.Println("Checking Requires...")
-	for _, name := range u.Requires() {
-		var dep *Unit
-		if dep, err = u.system.Get(name); err != nil {
-			return fmt.Errorf("Error loading dependency %s: %s", name, err)
-		}
-
-		if !dep.isActive() {
-			dep.waitFor()
-			if !dep.isActive() {
-				return fmt.Errorf("Dependency %s failed to start", name)
-			}
-		}
-	}
-
-	if u.Supervisable == nil {
-		return ErrNotLoaded
-	}
-
-	if starter, ok := u.Supervisable.(unit.Starter); ok {
-		err = starter.Start()
-	}
-	return
-}
-
-func (u *Unit) Stop() (err error) {
-	return ErrNotImplemented
-}
-func (u Unit) isActive() bool {
-	return u.Active() == unit.Active
-}
-func (u Unit) isLoading() bool {
-	return u.Active() == unit.Activating
-}
-func (u Unit) waitFor() {
-	<-u.loading
 	return
 }
