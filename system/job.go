@@ -5,7 +5,7 @@ import "fmt"
 type Job struct {
 	Type   JobType
 	Units  map[string]*Unit
-	system *System
+	system *Daemon
 }
 
 type JobType int
@@ -16,7 +16,7 @@ const (
 	isolate
 )
 
-func (sys *System) NewJob(typ JobType, names ...string) (j *Job, err error) {
+func (sys *Daemon) NewJob(typ JobType, names ...string) (j *Job, err error) {
 	j = &Job{
 		Type:   typ,
 		Units:  map[string]*Unit{},

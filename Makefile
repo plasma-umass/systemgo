@@ -37,9 +37,10 @@ ABS_INIT=$(ABS_REPO)/$(INIT)
 ABS_SYSTEM=$(ABS_REPO)/$(SYSTEM)
 ABS_SYSTEMCTL=$(ABS_REPO)/$(SYSTEMCTL)
 
-MOCK_PKGS=mock_system mock_unit
-system_interfaces=Supervisable,Manager
+MOCK_PKGS=mock_system mock_unit mock_systemctl
+system_interfaces=Supervisable
 unit_interfaces=Starter,Stopper,StartStopper,Reloader,Subber
+systemctl_interfaces=Daemon
 
 all: build test
 
@@ -80,7 +81,7 @@ $(MOCK_PKGS) test cover build: generate
 
 init systemctl: % : $(wildcard cmd/%/*.go)
 	@echo "Building $@..."
-	@go build -o $(ABS_BINDIR)/$@ $(REPO)/$@
+	@go build -o $(ABS_BINDIR)/$@ $(REPO)/cmd/$@
 	@echo "$@ built and saved to $(ABS_BINDIR)/$@"
 
 install: build
@@ -95,6 +96,7 @@ $(MOCK_PKGS): mock_%: $(wildcard %/interfaces.go)
 	@mkdir -p $(ABS_TEST)/$@
 	@mockgen -destination=$(ABS_TEST)/$@/$@.go -package=$@ $(REPO)/$* $($*_interfaces)
 	@echo "$@ package built and saved to $(ABS_TEST)/$@"
+	@go get $(PKG_TEST)/$@
 
 test: dependtest mock 
 	@echo "Starting tests..."
