@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/b1101/systemgo/test"
-	"github.com/b1101/systemgo/test/mock_system"
+	"github.com/b1101/systemgo/test/mock_unit"
 	"github.com/golang/mock/gomock"
 )
 
@@ -28,7 +28,7 @@ func TestLoad(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	uInt := mock_system.NewMockSupervisable(ctrl)
+	uInt := mock_unit.NewMockInterface(ctrl)
 	uInt.EXPECT().Define(gomock.Any()).Return(nil).Times(2)
 
 	u := NewUnit(uInt)

@@ -3,10 +3,8 @@ package system
 import (
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
-	"reflect"
 	"sync"
 
 	"github.com/b1101/systemgo/unit"
@@ -15,27 +13,28 @@ import (
 var ErrIsLoading = errors.New("Unit is already loading")
 
 type Unit struct {
-	Supervisable
+	unit.Interface
 
 	Log *Log
 
 	path   string
 	loaded unit.Load
 
-	requires map[string]dependency
+	requires map[string]SubWaiter
 
 	loading chan struct{}
 }
 
-type dependency interface {
+// Internally used interface exported for mocking
+type SubWaiter interface {
 	unit.Subber
 	Wait()
 }
 
-func NewUnit(v Supervisable) (u *Unit) {
+func NewUnit(v unit.Interface) (u *Unit) {
 	return &Unit{
-		Supervisable: v,
-		Log:          NewLog(),
+		Interface: v,
+		Log:       NewLog(),
 	}
 }
 
@@ -60,7 +59,7 @@ func (u *Unit) Status() fmt.Stringer {
 	}
 	// TODO deal with different unit types requiring different status
 	// something like u.Interface.HasX() ?
-	switch u.Supervisable.(type) {
+	switch u.Interface.(type) {
 	//case *unit.Service:
 	//return unit.ServiceStatus{st}
 	default:
@@ -69,84 +68,25 @@ func (u *Unit) Status() fmt.Stringer {
 }
 
 func (u *Unit) Active() unit.Activation {
-	if u.Supervisable == nil {
+	if u.Interface == nil {
 		return unit.Inactive
 	} else {
-		return u.Supervisable.Active()
+		return u.Interface.Active()
 	}
 }
 
 func (u *Unit) Sub() string {
-	if u.Supervisable == nil {
+	if u.Interface == nil {
 		return "dead"
 	} else {
-		return u.Supervisable.Sub()
+		return u.Interface.Sub()
 	}
-}
-
-// Description returns a string as found in Definition
-func (u *Unit) Description() (description string) {
-	if u.Supervisable == nil {
-		return
-	}
-	return u.definition().Description()
-}
-
-// Documentation returns a string as found in definition
-func (u *Unit) Documentation() (documentation string) {
-	if u.Supervisable == nil {
-		return
-	}
-	return u.definition().Documentation()
-}
-
-// Conflicts returns a slice of unit names as found in definition
-func (u *Unit) Conflicts() (names []string) {
-	if u.Supervisable == nil {
-		return
-	}
-	return u.definition().Conflicts()
-}
-
-// After returns a slice of unit names as found in definition
-func (u *Unit) After() (names []string) {
-	if u.Supervisable == nil {
-		return
-	}
-	return u.definition().After()
-}
-
-// Before returns a slice of unit names as found in definition
-func (u *Unit) Before() (names []string) {
-	if u.Supervisable == nil {
-		return
-	}
-	return u.definition().Before()
-}
-
-// RequiredBy returns a slice of unit names as found in definition
-func (u *Unit) RequiredBy() (names []string) {
-	if u.Supervisable == nil {
-		return
-	}
-	return u.definition().RequiredBy()
-}
-
-// WantedBy returns a slice of unit names as found in definition
-func (u *Unit) WantedBy() (names []string) {
-	if u.Supervisable == nil {
-		return
-	}
-	return u.definition().WantedBy()
 }
 
 // Requires returns a slice of unit names as found in definition and absolute paths
 // of units symlinked in units '.wants' directory
 func (u *Unit) Requires() (names []string) {
-	if u.Supervisable == nil {
-		return
-	}
-	names = u.definition().Requires()
+	names = u.Interface.Requires()
 
 	if paths, err := u.parseDepDir(".requires"); err == nil {
 		names = append(names, paths...)
@@ -158,9 +98,7 @@ func (u *Unit) Requires() (names []string) {
 // Wants returns a slice of unit names as found in definition and absolute paths
 // of units symlinked in units '.wants' directory
 func (u *Unit) Wants() (names []string) {
-	if u.Supervisable != nil {
-		names = u.definition().Wants()
-	}
+	names = u.Interface.Wants()
 
 	if paths, err := u.parseDepDir(".wants"); err == nil {
 		names = append(names, paths...)
@@ -170,9 +108,7 @@ func (u *Unit) Wants() (names []string) {
 }
 
 func (u *Unit) Start() (err error) {
-	if u.Supervisable == nil {
-		return ErrNotLoaded
-	} else if u.isLoading() {
+	if u.isLoading() {
 		return ErrIsLoading
 	}
 
@@ -186,16 +122,15 @@ func (u *Unit) Start() (err error) {
 
 	wg := &sync.WaitGroup{}
 	for name, dep := range u.requires {
-		name, dep := name, dep
 		wg.Add(1)
-		go func( /*name string, unit unit.Subber*/ ) {
+		go func(name string, dep SubWaiter) {
 			defer wg.Done()
 			dep.Wait()
 			if dep.Active() != unit.Active {
 				u.Log.Printf("Dependency %s failed to start", name)
 				err = ErrDepFail
 			}
-		}( /*name, unit*/ )
+		}(name, dep)
 	}
 
 	wg.Wait()
@@ -203,14 +138,14 @@ func (u *Unit) Start() (err error) {
 		return
 	}
 
-	return u.Supervisable.Start()
+	return u.Interface.Start()
 }
 func (u *Unit) Stop() (err error) {
-	if u.Supervisable == nil {
+	if u.Interface == nil {
 		return ErrNotLoaded
 	}
 
-	return u.Supervisable.Stop()
+	return u.Interface.Stop()
 }
 func (u *Unit) Wait() {
 	if u.loading == nil {
@@ -225,18 +160,6 @@ func (u *Unit) isActive() bool {
 }
 func (u *Unit) isLoading() bool {
 	return u.loading == nil
-}
-
-// definition returns pointer to the definition of u
-// Assumes that u has a "Definition" field, which implements definition
-func (u *Unit) definition() (d definition) {
-	defer func() {
-		if r := recover(); r != nil {
-			log.Fatalln(r)
-		}
-	}()
-
-	return reflect.ValueOf(u).Elem().FieldByName("Definition").Addr().Interface().(definition)
 }
 
 func (u *Unit) parseDepDir(suffix string) (paths []string, err error) {

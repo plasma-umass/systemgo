@@ -11,7 +11,7 @@ import (
 // it in the unit package
 type Target struct {
 	// Target definition does not have any specific fields
-	Definition unit.Definition
+	unit.Definition
 
 	// Used to get target dependencies
 	Getter

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/b1101/systemgo/unit"
+	"github.com/b1101/systemgo/unit/service"
 
 	log "github.com/Sirupsen/logrus"
 )
@@ -64,6 +65,7 @@ func New() (sys *Daemon) {
 		}
 	}()
 	return &Daemon{
+		active: make(map[string]*Unit),
 		loaded: make(map[string]*Unit),
 		parsed: make(map[string]*Unit),
 
@@ -125,7 +127,7 @@ func (sys *Daemon) Reload(name string) (err error) {
 		return
 	}
 
-	if reloader, ok := u.Supervisable.(unit.Reloader); ok {
+	if reloader, ok := u.Interface.(unit.Reloader); ok {
 		return reloader.Reload()
 	}
 
@@ -239,12 +241,12 @@ func (sys *Daemon) Load(name string) (u *Unit, err error) {
 
 		var parsed bool
 		if u, parsed = sys.parsed[name]; !parsed {
-			var v Supervisable
+			var v unit.Interface
 			switch filepath.Ext(path) {
 			case ".target":
 				v = &Target{Getter: sys}
 			case ".service":
-				v = &unit.Service{}
+				v = &service.Unit{}
 			default:
 				log.Fatalln("Trying to load an unsupported unit type")
 			}
@@ -275,7 +277,7 @@ func (sys *Daemon) Load(name string) (u *Unit, err error) {
 			return u, err
 		}
 
-		if err = u.Supervisable.Define(file); err != nil {
+		if err = u.Interface.Define(file); err != nil {
 			if me, ok := err.(unit.MultiError); ok {
 				u.Log.Printf("Definition is invalid:")
 				for _, errmsg := range me.Errors() {

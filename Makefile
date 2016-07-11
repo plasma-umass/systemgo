@@ -37,9 +37,9 @@ ABS_INIT=$(ABS_REPO)/$(INIT)
 ABS_SYSTEM=$(ABS_REPO)/$(SYSTEM)
 ABS_SYSTEMCTL=$(ABS_REPO)/$(SYSTEMCTL)
 
-MOCK_PKGS=mock_system mock_unit mock_systemctl
-system_interfaces=Supervisable
-unit_interfaces=Starter,Stopper,StartStopper,Reloader,Subber
+MOCK_PKGS=mock_unit mock_systemctl
+#system_interfaces=Supervisable,Dependency,Reloader
+unit_interfaces=Interface,Reloader
 systemctl_interfaces=Daemon
 
 all: build test

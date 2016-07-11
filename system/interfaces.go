@@ -8,9 +8,8 @@ import (
 
 // Supervisable represents anything that can be supervised by an instance of a system.Interface
 type Supervisable interface {
-	unit.StartStopper
-	unit.Subber
-	unit.Definer
+	unit.Interface
+	Statuser
 }
 
 // Statuser is implemented by anything that can report its' own status
@@ -22,26 +21,9 @@ type Statuser interface {
 // Manages instances of unit.Interface and operates on them by name.
 // Provides handlers for system control and is meant to be exposed
 // to the 'init' package, or anything else that could want to use it
-
 type Getter interface {
 	Get(string) (*Unit, error)
 }
 type Loader interface {
 	Load(string) (*Unit, error)
-}
-
-type definition interface {
-	Description() string
-	Documentation() string
-
-	Wants() []string
-	Requires() []string
-
-	After() []string
-	Before() []string
-
-	Conflicts() []string
-
-	RequiredBy() []string
-	WantedBy() []string
 }

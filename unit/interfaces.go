@@ -2,6 +2,19 @@ package unit
 
 import "io"
 
+type Interface interface {
+	Definer
+	Subber
+	StartStopper
+
+	Description() string
+	Documentation() string
+
+	Dependency
+
+	Orderable
+}
+
 type Definer interface {
 	Define(io.Reader) error
 }
@@ -31,4 +44,19 @@ type Stopper interface {
 // Reloader is implemented by any value capable of reloading itself(or its definition)
 type Reloader interface {
 	Reload() error
+}
+
+type Dependency interface {
+	Wants() []string
+	Requires() []string
+
+	Conflicts() []string
+
+	RequiredBy() []string
+	WantedBy() []string
+}
+
+type Orderable interface {
+	After() []string
+	Before() []string
 }
