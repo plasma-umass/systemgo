@@ -103,17 +103,23 @@ func (sys *Daemon) Status() (st Status, err error) {
 }
 
 func (sys *Daemon) Start(names ...string) (err error) {
+	log.Debugf("sys.Start names:\n%+v", names)
 	var units map[string]*Unit
 	if units, err = sys.loadDeps(names); err != nil {
 		return
 	}
+	log.Debugf("sys.loadDeps returned:\n%+v, nil", units)
 
 	var ordering []*Unit
 	if ordering, err = sys.order(units); err != nil {
 		return
 	}
+	log.Debugf("sys.order returned:\n%+v, nil", ordering)
 
 	for _, u := range ordering {
+		for _, dep := range u.Conflicts() {
+			log.Debugf("conflicts with %s", dep)
+		}
 		sys.active[sys.nameOf(u)] = u
 		go u.Start()
 	}
@@ -404,6 +410,8 @@ type graph struct {
 }
 
 func (sys *Daemon) order(units map[string]*Unit) (ordering []*Unit, err error) {
+	log.Debugf("sys.order recieved units:\n%+v", units)
+
 	g := &graph{
 		map[*Unit]struct{}{},
 		map[*Unit]struct{}{},
@@ -415,16 +423,18 @@ func (sys *Daemon) order(units map[string]*Unit) (ordering []*Unit, err error) {
 		g.before[unit] = map[string]*Unit{}
 	}
 
+	log.Debugf("g.before:\n%+v", g.before)
+
 	for name, unit := range units {
 		for _, depname := range unit.After() {
-			log.Debugln(name, " after ", depname)
+			log.Debugf("%s after %s", name, depname)
 			if dep, ok := units[depname]; ok {
 				g.before[unit][depname] = dep
 			}
 		}
 
 		for _, depname := range unit.Before() {
-			log.Debugln(name, " before ", depname)
+			log.Debugf("%s before %s", name, depname)
 			if dep, ok := units[depname]; ok {
 				g.before[dep][name] = unit
 			}

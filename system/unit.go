@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sync"
 
+	log "github.com/Sirupsen/logrus"
 	"github.com/b1101/systemgo/unit"
 )
 
@@ -108,6 +109,7 @@ func (u *Unit) Wants() (names []string) {
 }
 
 func (u *Unit) Start() (err error) {
+	log.Debugf("Start called on %p - %v", u, u)
 	if u.isLoading() {
 		return ErrIsLoading
 	}
@@ -125,6 +127,7 @@ func (u *Unit) Start() (err error) {
 		wg.Add(1)
 		go func(name string, dep SubWaiter) {
 			defer wg.Done()
+			log.Debugf("%p Waiting for %p(%s)", u, dep, name)
 			dep.Wait()
 			if dep.Active() != unit.Active {
 				u.Log.Printf("Dependency %s failed to start", name)
@@ -133,11 +136,13 @@ func (u *Unit) Start() (err error) {
 		}(name, dep)
 	}
 
+	log.Debugf("%p Waiting for all required dependencies to finish loading", u)
 	wg.Wait()
 	if err != nil {
 		return
 	}
 
+	log.Debugf("%p Starting", u)
 	return u.Interface.Start()
 }
 func (u *Unit) Stop() (err error) {
@@ -159,7 +164,7 @@ func (u *Unit) isActive() bool {
 	return u.Active() == unit.Active
 }
 func (u *Unit) isLoading() bool {
-	return u.loading == nil
+	return u.loading != nil
 }
 
 func (u *Unit) parseDepDir(suffix string) (paths []string, err error) {

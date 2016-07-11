@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/b1101/systemgo/test/mock_unit"
 	"github.com/golang/mock/gomock"
@@ -12,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestLoad(t *testing.T) {
+func TestGet(t *testing.T) {
 	sys := New()
 	sys.SetPaths(os.TempDir())
 
@@ -78,7 +79,76 @@ func TestPathset(t *testing.T) {
 	assert.Len(t, paths, correct, "paths")
 }
 
-func TestOrder(t *testing.T) {
+func TestStart(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
+
+	abc := map[string]*mock_unit.MockInterface{
+		"a": mock_unit.NewMockInterface(ctrl),
+		"b": mock_unit.NewMockInterface(ctrl),
+		"c": mock_unit.NewMockInterface(ctrl),
+	}
+
+	abc["a"].EXPECT().Requires().Return([]string{"b", "c"})
+	abc["b"].EXPECT().Requires().Return([]string{"c"})
+
+	empty(abc["a"], "wants", "after", "before", "conflicts")
+	empty(abc["b"], "wants", "after", "before", "conflicts")
+	empty(abc["c"], "wants", "after", "before", "conflicts", "requires")
+
+	for mocks, seq := range map[*map[string]*mock_unit.MockInterface][]string{
+		&abc: {"a", "b", "c"},
+	} {
+		sys := New()
+
+		for name, m := range *mocks {
+			u := NewUnit(m)
+			sys.loaded[name] = u
+			sys.names[u] = name
+		}
+
+		sequence(*mocks, seq)
+
+		assert.NoError(t, sys.Start(seq[0]), "sys.Start("+seq[0]+")")
+
+		time.Sleep(3 * time.Second)
+	}
+}
+
+func sequence(units map[string]*mock_unit.MockInterface, names []string) *gomock.Call {
+	switch len(names) {
+	case 0:
+		return nil
+	case 1:
+		return units[names[0]].EXPECT().Start().Return(nil).Times(1)
+	default:
+		return units[names[0]].EXPECT().Start().Return(nil).After(sequence(units, names[1:])).Times(1)
+	}
+}
+
+func empty(m *mock_unit.MockInterface, methods ...string) {
+	for _, method := range methods {
+		emptyOne(m, method).Times(1)
+	}
+}
+
+func emptyOne(m *mock_unit.MockInterface, method string) (c *gomock.Call) {
+	exp := m.EXPECT()
+	switch method {
+	case "requires":
+		c = exp.Requires()
+	case "wants":
+		c = exp.Wants()
+	case "before":
+		c = exp.Before()
+	case "after":
+		c = exp.After()
+	case "wantedBy":
+		c = exp.WantedBy()
+	case "requiredBy":
+		c = exp.RequiredBy()
+	case "conflicts":
+		c = exp.Conflicts()
+	}
+	return c.Return([]string{})
 }
