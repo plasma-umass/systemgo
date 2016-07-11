@@ -51,7 +51,7 @@ func (targ *Unit) Active() unit.Activation {
 		encountered[dep.Active()] = true
 	}
 
-	for _, state := range []unit.Activation{unit.Failed, unit.Activating, unit.Deactivating} {
+	for _, state := range []unit.Activation{unit.Failed, unit.Activating, unit.Deactivating, unit.Reloading, unit.Inactive} {
 		if encountered[state] {
 			return state
 		}

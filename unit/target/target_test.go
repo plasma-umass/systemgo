@@ -1,0 +1,63 @@
+// Package target_test provides ...
+package target_test
+
+import (
+	"fmt"
+	"testing"
+
+	"github.com/b1101/systemgo/system"
+	"github.com/b1101/systemgo/test/mock_unit"
+	"github.com/b1101/systemgo/unit"
+	"github.com/b1101/systemgo/unit/target"
+	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/assert"
+)
+
+func TestActive(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	targ := &target.Unit{Get: func(name string) (unit.Subber, error) {
+		u := mock_unit.NewMockInterface(ctrl)
+		switch name {
+		case "active":
+			u.EXPECT().Active().Return(unit.Active).Times(1)
+		case "inactive":
+			u.EXPECT().Active().Return(unit.Inactive).Times(1)
+		case "reloading":
+			u.EXPECT().Active().Return(unit.Reloading).Times(1)
+		case "failed":
+			u.EXPECT().Active().Return(unit.Failed).Times(1)
+		case "activating":
+			u.EXPECT().Active().Return(unit.Activating).Times(1)
+		case "deactivating":
+			u.EXPECT().Active().Return(unit.Deactivating).Times(1)
+		default:
+			return nil, system.ErrNotFound
+		}
+		return u, nil
+	}}
+
+	for deps, expected := range map[*[]string]unit.Activation{
+		{"non-existent"}:                       unit.Inactive,
+		{"active"}:                             unit.Active,
+		{"active", "inactive"}:                 unit.Inactive,
+		{"active", "inactive", "failed"}:       unit.Failed,
+		{"active", "inactive", "activating"}:   unit.Activating,
+		{"active", "inactive", "deactivating"}: unit.Deactivating,
+		{"active", "inactive", "reloading"}:    unit.Reloading,
+	} {
+		targ.Definition.Unit.Requires = *deps
+		assert.Equal(t, targ.Active(), expected, fmt.Sprintf("Should be %s, not %s\ndeps: %v", expected, targ.Active(), *deps))
+	}
+}
+
+func TestStart(t *testing.T) {
+	targ := &target.Unit{}
+	assert.Equal(t, targ.Start(), nil)
+}
+
+func TestStop(t *testing.T) {
+	targ := &target.Unit{}
+	assert.Equal(t, targ.Stop(), nil)
+}
