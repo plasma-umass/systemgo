@@ -2,7 +2,7 @@ package swap
 
 type Sub int
 
-//go:generate stringer -type=Sub
+//go:generate stringer -type=Sub sub.go
 const (
 	Dead           Sub = iota
 	Activating         // /sbin/swapon is running, but the swap not yet enabled

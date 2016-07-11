@@ -3,7 +3,7 @@ package service
 // Status of service units -- https://goo.gl/eg9PS3
 type Sub int
 
-//go:generate stringer -type=Sub
+//go:generate stringer -type=Sub sub.go
 const (
 	Dead Sub = iota
 	StartPre
