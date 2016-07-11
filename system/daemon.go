@@ -2,12 +2,13 @@ package system
 
 import (
 	"io/ioutil"
-	"log"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/b1101/systemgo/unit"
+
+	log "github.com/Sirupsen/logrus"
 )
 
 var DEFAULT_PATHS = []string{"/etc/systemd/system/", "/run/systemd/system", "/lib/systemd/system"}
@@ -55,6 +56,13 @@ func Supported(filename string) bool {
 }
 
 func New() (sys *Daemon) {
+	defer func() {
+		if debug {
+			sys.Log.Logger.Hooks.Add(&errorHook{
+				Source: "system",
+			})
+		}
+	}()
 	return &Daemon{
 		loaded: make(map[string]*Unit),
 		parsed: make(map[string]*Unit),
@@ -243,9 +251,16 @@ func (sys *Daemon) Load(name string) (u *Unit, err error) {
 
 			u = NewUnit(v)
 			sys.parsed[name] = u
+			sys.Log.Debugf("Created a *Unit wrapping %s and put into internal hashmap")
 
 			if name != path {
 				sys.parsed[path] = u
+			}
+
+			if debug {
+				u.Log.Logger.Hooks.Add(&errorHook{
+					Source: name,
+				})
 			}
 		}
 

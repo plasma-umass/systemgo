@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/b1101/systemgo/system"
 	"github.com/b1101/systemgo/test"
 )
 
@@ -81,8 +80,6 @@ func populate(path string) (err error) {
 var etc, lib, dirpath string
 
 func init() {
-	system.Debug = true
-
 	var err error
 	if dirpath, err = ioutil.TempDir("", "init-test"); err != nil {
 		log.Fatalf(test.ErrorIn, "ioutil.Tempdir", err)
