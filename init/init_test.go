@@ -8,8 +8,6 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
-
-	"github.com/b1101/systemgo/test"
 )
 
 var units = map[string][]struct {
@@ -82,7 +80,7 @@ var etc, lib, dirpath string
 func init() {
 	var err error
 	if dirpath, err = ioutil.TempDir("", "init-test"); err != nil {
-		log.Fatalf(test.ErrorIn, "ioutil.Tempdir", err)
+		log.Fatalf("ioutil.Tempdir: %s", err)
 	}
 
 	etc = filepath.Join(dirpath, "etc", "systemd", "system")
@@ -91,7 +89,7 @@ func init() {
 
 	if err = populate(dirpath); err != nil {
 		os.RemoveAll(dirpath)
-		log.Fatalf(test.ErrorIn, "populate", err)
+		log.Fatalf("populate: %s", err)
 	}
 }
 

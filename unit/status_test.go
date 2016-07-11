@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/b1101/systemgo/test"
 	"github.com/b1101/systemgo/unit"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestStatus(t *testing.T) {
@@ -35,7 +35,5 @@ Log:
 		st.Log,
 	)
 
-	if st.String() != expected {
-		t.Errorf(test.Mismatch, st, expected)
-	}
+	assert.Equal(t, st.String(), expected)
 }

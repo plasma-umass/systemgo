@@ -5,7 +5,8 @@ import (
 	"io/ioutil"
 	"testing"
 
-	"github.com/b1101/systemgo/test"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var lorem = []byte(`
@@ -20,11 +21,9 @@ var lorem = []byte(`
 
 func TestWrite(t *testing.T) {
 	l := NewLog()
-	l.Write(lorem)
 
-	if len(lorem) != l.Len() {
-		t.Errorf(test.MismatchInVal, "l.Len()", l.Len(), len(lorem))
-	}
+	l.Write(lorem)
+	assert.Equal(t, len(lorem), l.Len(), "l.Len()")
 
 	l.buffer.Reset()
 
@@ -37,15 +36,10 @@ func TestWrite(t *testing.T) {
 		b = append(b, lorem...)
 	}
 
-	if n, err := l.Write(b); err != nil {
-		t.Errorf(test.ErrorIn, "l.Write(b)", err)
-	} else if n != BUFFER_SIZE {
-		t.Errorf(test.MismatchInVal, "l.Write(b)", n, BUFFER_SIZE)
-	}
-
-	if l.Cap() != BUFFER_SIZE {
-		t.Errorf(test.MismatchInVal, "l.Cap()", l.Cap(), BUFFER_SIZE)
-	}
+	n, err := l.Write(b)
+	assert.NoError(t, err, "l.Write(b)")
+	assert.Equal(t, n, BUFFER_SIZE, "l.Write(b)")
+	assert.Equal(t, l.Cap(), BUFFER_SIZE, "l.Cap()")
 
 	var char byte
 	if (BUFFER_SIZE-len(b))%len(b) == 0 {
@@ -54,18 +48,17 @@ func TestWrite(t *testing.T) {
 		r := bytes.NewReader(b)
 		for {
 			// Search for first \n and char to next one after that
-			if c, err := r.ReadByte(); err != nil {
-				t.Fatalf(test.ErrorIn, "r.ReadByte()", err)
-			} else if c == '\n' {
+			c, err := r.ReadByte()
+			require.NoError(t, err, "r.ReadByte()")
+
+			if c == '\n' {
 				char, _ = r.ReadByte()
 				break
 			}
 		}
 	}
 
-	if l.buffer.Bytes()[0] != char {
-		t.Errorf(test.MismatchIn, "l.buffer.Bytes()[0]", string(l.buffer.Bytes()[0]), string(char))
-	}
+	assert.Equal(t, char, l.buffer.Bytes()[0])
 }
 
 func TestRead(t *testing.T) {
@@ -73,14 +66,10 @@ func TestRead(t *testing.T) {
 	l.buffer = bytes.NewBuffer(lorem)
 
 	b, err := ioutil.ReadAll(l)
-	if err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, err, "first ioutil.ReadAll(l)")
 
 	bTest, err := ioutil.ReadAll(l)
-	if err != nil {
-		t.Errorf(test.Error, err)
-	} else if string(bTest) != string(b) {
-		t.Errorf(test.MismatchInVal, "ioutil.ReadAll(l)", bTest, b)
-	}
+	assert.NoError(t, err, "second ioutil.ReadAll(l)")
+
+	assert.Equal(t, b, bTest, "ioutil.ReadAll(l) bytes read")
 }

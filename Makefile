@@ -53,13 +53,14 @@ depend:
 	@go get -v -d $(REPO)/...
 
 dependtest: dependmock
+	@go get -v github.com/stretchr/testify
 
 dependmock:
 	@echo "Checking mock testing dependencies..."
 	@go get -v github.com/golang/mock/gomock
 	@go get -v github.com/golang/mock/mockgen
 
-dependcover:
+dependcover: dependtest
 	@echo "Checking coverage testing dependencies..."
 	@go get -v golang.org/x/tools/cmd/cover
 	@go get -v github.com/wadey/gocovmerge
@@ -67,7 +68,6 @@ dependcover:
 dependcoverall: dependcover
 	@echo "Checking coveralls.io testing dependencies..."
 	@go get -v github.com/mattn/goveralls
-
 
 vet: generate
 	@echo "Running 'go vet'..."

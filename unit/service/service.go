@@ -42,8 +42,7 @@ type Definition struct {
 }
 
 func Supported(typ string) (is bool) {
-	_, is = supported[typ]
-	return
+	return supported[typ]
 }
 
 // Define attempts to fill the sv definition by parsing r

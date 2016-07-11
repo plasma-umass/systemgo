@@ -6,9 +6,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/b1101/systemgo/test"
 	"github.com/b1101/systemgo/test/mock_unit"
 	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestLoad(t *testing.T) {
@@ -20,9 +21,7 @@ func TestLoad(t *testing.T) {
 	fpath := filepath.Join(os.TempDir(), name)
 
 	file, err := os.Create(fpath)
-	if err != nil {
-		t.Fatalf(test.ErrorIn, "os.Create("+fpath+")", err)
-	}
+	require.NoError(t, err, "os.Create(fpath)")
 	defer file.Close()
 
 	ctrl := gomock.NewController(t)
@@ -37,33 +36,23 @@ func TestLoad(t *testing.T) {
 	sys.parsed[fpath] = u
 
 	for _, name := range []string{name, fpath} {
-		if ptr, err := sys.Get(name); err != nil {
-			t.Errorf(test.ErrorIn, "sys.Get("+name+")", err)
-		} else {
-			if u != ptr {
-				t.Errorf(test.MismatchInVal, "sys.Get("+name+")", u, ptr)
-			}
-		}
+		ptr, err := sys.Get(name)
+		require.NoError(t, err, "sys.Get")
+		assert.Equal(t, u, ptr, "*Unit")
 	}
 }
 
 func TestSuported(t *testing.T) {
 	for suffix, is := range supported {
-		if Supported("foo"+suffix) != is {
-			t.Errorf(test.NotSupported, suffix)
-		}
+		assert.Equal(t, is, Supported("foo"+suffix))
 	}
 
-	if Supported("foo.wrong") {
-		t.Errorf(test.Supported, ".wrong")
-	}
+	assert.False(t, Supported("foo.wrong"))
 }
 
 func TestPathset(t *testing.T) {
 	path, err := ioutil.TempDir("", "pathset-test")
-	if err != nil {
-		t.Fatalf("Error creating dir: %s", err)
-	}
+	require.NoError(t, err, "ioutil.TempDir")
 	defer os.RemoveAll(path)
 
 	cases := []string{
@@ -76,18 +65,20 @@ func TestPathset(t *testing.T) {
 
 	correct := 0
 	for _, name := range cases {
-		if err = ioutil.WriteFile(filepath.Join(path, name), []byte{}, 0666); err != nil {
-			t.Fatalf(test.ErrorIn, "ioutil.WriteFile", err)
-		}
+		err = ioutil.WriteFile(filepath.Join(path, name), []byte{}, 0666)
+		require.NoError(t, err, "ioutil.WriteFile")
 
 		if Supported(name) {
 			correct++
 		}
 	}
 
-	if paths, err := pathset(path); err != nil {
-		t.Fatalf(test.ErrorIn, "pathset", err)
-	} else if len(paths) != correct {
-		t.Errorf(test.MismatchInVal, "len(paths)", len(paths), correct)
-	}
+	paths, err := pathset(path)
+	require.NoError(t, err, "pathset")
+	assert.Len(t, paths, correct, "paths")
+}
+
+func TestOrder(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 }

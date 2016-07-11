@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/b1101/systemgo/test"
 	"github.com/b1101/systemgo/unit"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestStates(t *testing.T) {
@@ -24,8 +24,6 @@ func TestStates(t *testing.T) {
 	}
 
 	for state, out := range states {
-		if state.String() != out {
-			t.Errorf(test.Mismatch, state, out)
-		}
+		assert.Equal(t, state.String(), out)
 	}
 }
