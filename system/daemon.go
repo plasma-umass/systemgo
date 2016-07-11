@@ -10,6 +10,7 @@ import (
 
 	"github.com/b1101/systemgo/unit"
 	"github.com/b1101/systemgo/unit/service"
+	"github.com/b1101/systemgo/unit/target"
 
 	log "github.com/Sirupsen/logrus"
 )
@@ -254,7 +255,9 @@ func (sys *Daemon) Load(name string) (u *Unit, err error) {
 			var v unit.Interface
 			switch filepath.Ext(path) {
 			case ".target":
-				v = &Target{Getter: sys}
+				v = &target.Unit{Get: func(name string) (unit.Subber, error) {
+					return sys.Get(name)
+				}}
 			case ".service":
 				v = &service.Unit{}
 			default:

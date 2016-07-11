@@ -1,4 +1,4 @@
-package system
+package target
 
 import (
 	"io"
@@ -9,40 +9,42 @@ import (
 // Target unit type.
 // Is different enough from other units to not include
 // it in the unit package
-type Target struct {
+type Unit struct {
 	// Target definition does not have any specific fields
 	unit.Definition
 
 	// Used to get target dependencies
-	Getter
+	Get GetFunc
 }
 
-func NewTarget(g Getter) (targ *Target) {
-	return &Target{
-		Getter: g,
+type GetFunc func(name string) (unit.Subber, error)
+
+func NewTarget(fn GetFunc) (targ *Unit) {
+	return &Unit{
+		Get: fn,
 	}
 }
 
 // Define attempts to fill the targ definition by parsing r
-func (targ *Target) Define(r io.Reader) (err error) {
+func (targ *Unit) Define(r io.Reader) (err error) {
 	return unit.ParseDefinition(r, &targ.Definition)
 }
 
 // Start attempts to start the dependencies of the target
-func (targ *Target) Start() (err error) {
+func (targ *Unit) Start() (err error) {
 	return
 }
 
 // Start attempts to stop units started by the target
-func (targ *Target) Stop() (err error) {
+func (targ *Unit) Stop() (err error) {
 	return
 }
 
-func (targ *Target) Active() unit.Activation {
+func (targ *Unit) Active() unit.Activation {
 	encountered := map[unit.Activation]bool{}
 
 	for _, name := range targ.Definition.Unit.Requires {
-		dep, err := targ.Getter.Get(name)
+		dep, err := targ.Get(name)
 		if err != nil {
 			return unit.Inactive
 		}
@@ -58,6 +60,6 @@ func (targ *Target) Active() unit.Activation {
 	return unit.Active
 }
 
-func (targ *Target) Sub() string {
+func (targ *Unit) Sub() string {
 	return "TODO"
 }
