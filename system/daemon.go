@@ -1,6 +1,8 @@
 package system
 
 import (
+	"errors"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -15,8 +17,8 @@ import (
 var DEFAULT_PATHS = []string{"/etc/systemd/system/", "/run/systemd/system", "/lib/systemd/system"}
 
 type Daemon struct {
-	// Map containing pointers to all currently active units
-	units map[string]*Unit
+	// Map containing pointers to all currently active units(name -> *Unit)
+	active map[string]*Unit
 
 	// Map containing pointers to all successfully loaded units(name -> *Unit)
 	loaded map[string]*Unit
@@ -35,6 +37,8 @@ type Daemon struct {
 
 	// System log
 	Log *Log
+
+	jobs []unit.Starter
 }
 
 var supported = map[string]bool{
@@ -94,6 +98,20 @@ func (sys *Daemon) Status() (st Status, err error) {
 }
 
 func (sys *Daemon) Start(names ...string) (err error) {
+	var units map[string]*Unit
+	if units, err = sys.loadDeps(names); err != nil {
+		return
+	}
+
+	var ordering []*Unit
+	if ordering, err = sys.order(units); err != nil {
+		return
+	}
+
+	for _, u := range ordering {
+		go u.Start()
+	}
+
 	//var job *Job
 	//if job, err = sys.NewJob(start, names...); err != nil {
 	//return
@@ -106,12 +124,8 @@ func (sys *Daemon) Start(names ...string) (err error) {
 }
 
 func (sys *Daemon) Stop(name string) (err error) {
-	var job *Job
-	if job, err = sys.NewJob(stop, name); err != nil {
-		return
-	}
 
-	return job.Start()
+	return nil
 }
 
 func (sys *Daemon) Restart(name string) (err error) {
@@ -181,7 +195,7 @@ var std = New()
 // If error is returned, it will be error from sys.Load(name)
 func (sys *Daemon) Get(name string) (u *Unit, err error) {
 	var ok bool
-	if u, ok = sys.units[name]; !ok {
+	if u, ok = sys.loaded[name]; !ok {
 		u, err = sys.Load(name)
 	}
 	return
@@ -292,6 +306,7 @@ func (sys *Daemon) Load(name string) (u *Unit, err error) {
 
 		u.loaded = unit.Loaded
 		sys.loaded[name] = u
+		sys.Log.Debugf("Unit %s loaded and put into internal hashmap", name)
 		return u, err
 	}
 
@@ -341,4 +356,116 @@ func pathset(path string) (definitions []string, err error) {
 	}
 
 	return
+}
+
+func (sys *Daemon) loadDeps(names []string) (units map[string]*Unit, err error) {
+	units = map[string]*Unit{}
+	added := func(name string) (is bool) {
+		_, is = units[name]
+		return
+	}
+
+	var failed bool
+	for len(names) > 0 {
+		var u *Unit
+		name := names[0]
+
+		if !added(name) {
+			if u, err = sys.Get(name); err != nil {
+				return nil, fmt.Errorf("Error loading dependency: %s", name)
+			}
+			units[name] = u
+
+			names = append(names, u.Requires()...)
+
+			for _, name := range u.Wants() {
+				if !added(name) {
+					units[name], _ = sys.Get(name)
+				}
+			}
+		}
+
+		names = names[1:]
+	}
+	if failed {
+		return nil, ErrDepFail
+	}
+
+	return
+}
+
+type graph struct {
+	ordered  map[*Unit]struct{}
+	visited  map[*Unit]struct{}
+	before   map[*Unit]map[string]*Unit
+	ordering []*Unit
+}
+
+func (sys *Daemon) order(units map[string]*Unit) (ordering []*Unit, err error) {
+	g := &graph{
+		map[*Unit]struct{}{},
+		map[*Unit]struct{}{},
+		map[*Unit]map[string]*Unit{},
+		make([]*Unit, 0, len(units)),
+	}
+
+	for _, unit := range units {
+		g.before[unit] = map[string]*Unit{}
+	}
+
+	for name, unit := range units {
+		for _, depname := range unit.After() {
+			log.Debugln(name, " after ", depname)
+			if dep, ok := units[depname]; ok {
+				g.before[unit][depname] = dep
+			}
+		}
+
+		for _, depname := range unit.Before() {
+			log.Debugln(name, " before ", depname)
+			if dep, ok := units[depname]; ok {
+				g.before[dep][name] = unit
+			}
+		}
+	}
+
+	for name, unit := range units {
+		if err = g.traverse(unit); err != nil {
+			return nil, fmt.Errorf("Dependency cycle determined:\n%s depends on %s", name, err)
+		}
+	}
+
+	return g.ordering, nil
+}
+
+var errBlank = errors.New("")
+
+func (g *graph) traverse(u *Unit) (err error) {
+	if _, has := g.ordered[u]; has {
+		return nil
+	}
+
+	if _, has := g.visited[u]; has {
+		return errBlank
+	}
+
+	g.visited[u] = struct{}{}
+
+	for name, dep := range g.before[u] {
+		if err = g.traverse(dep); err != nil {
+			if err == errBlank {
+				return fmt.Errorf("%s\n", name)
+			}
+			return fmt.Errorf("%s\n%s depends on %s", name, name, err)
+		}
+	}
+
+	delete(g.visited, u)
+
+	if _, has := g.ordered[u]; !has {
+		g.ordering = append(g.ordering, u)
+		g.ordered[u] = struct{}{}
+	}
+
+	return nil
 }
