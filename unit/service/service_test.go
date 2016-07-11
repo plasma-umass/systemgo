@@ -1,4 +1,4 @@
-package unit_test
+package service_test
 
 import (
 	"strings"
@@ -6,16 +6,17 @@ import (
 
 	"github.com/b1101/systemgo/test"
 	"github.com/b1101/systemgo/unit"
+	"github.com/b1101/systemgo/unit/service"
 )
 
 func TestSupportedSimple(t *testing.T) {
-	if !unit.SupportedService("simple") {
+	if !service.Supported("simple") {
 		t.Errorf(test.MismatchVal, false, true)
 	}
 }
 
 func TestNewService(t *testing.T) {
-	sv := unit.Service{}
+	sv := service.Unit{}
 
 	err := sv.Define(strings.NewReader(`[Service]
 ExecStart=/bin/echo test`))
@@ -23,11 +24,11 @@ ExecStart=/bin/echo test`))
 		t.Errorf(test.ErrorIn, "sv.Define", err)
 	}
 
-	if sv.Definition.Service.Type != unit.DEFAULT_SERVICE_TYPE {
-		t.Errorf(test.MismatchIn, "sv.Definition.Service.Type", sv.Definition.Service.Type, unit.DEFAULT_SERVICE_TYPE)
+	if sv.Service.Type != service.DEFAULT_TYPE {
+		t.Errorf(test.MismatchIn, "sv.Definition.Service.Type", sv.Service.Type, service.DEFAULT_TYPE)
 	}
 
-	sv = unit.Service{}
+	sv = service.Unit{}
 
 	if err = sv.Define(strings.NewReader(`[Service]`)); err != nil {
 		if me, ok := err.(unit.MultiError); ok {
@@ -46,7 +47,7 @@ ExecStart=/bin/echo test`))
 
 // Simple service type test
 func TestSimpleService(t *testing.T) {
-	sv := unit.Service{}
+	sv := service.Unit{}
 
 	sv.Definition.Service.ExecStart = "/bin/sleep 5"
 
@@ -68,7 +69,7 @@ Type=simple`))
 
 // Oneshot service type test
 func TestOneshotService(t *testing.T) {
-	sv := unit.Service{}
+	sv := service.Unit{}
 
 	err := sv.Define(strings.NewReader(`[Service]
 ExecStart=/bin/echo oneshot

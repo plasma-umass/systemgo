@@ -1,17 +1,20 @@
-package unit
+// Package service defines a service unit type
+package service
 
 import (
 	"errors"
 	"io"
 	"os/exec"
 	"strings"
+
+	"github.com/b1101/systemgo/unit"
 )
 
-const DEFAULT_SERVICE_TYPE = "simple"
+const DEFAULT_TYPE = "simple"
 
 var ErrNotStarted = errors.New("Service not started")
 
-var supportedServiceTypes = map[string]bool{
+var supported = map[string]bool{
 	"oneshot": true,
 	"simple":  true,
 	"forking": false,
@@ -20,54 +23,54 @@ var supportedServiceTypes = map[string]bool{
 	"idle":    false,
 }
 
-func SupportedService(typ string) (is bool) {
-	_, is = supportedServiceTypes[typ]
-	return
-}
-
 // Service unit
-type Service struct {
-	Definition struct {
-		Definition
-		Service struct {
-			Type                            string
-			ExecStart, ExecStop, ExecReload string
-			PIDFile                         string
-			Restart                         string
-			RemainAfterExit                 bool
-		}
-	}
-
+type Unit struct {
+	Definition
 	*exec.Cmd
 }
 
+// Service unit definition
+type Definition struct {
+	unit.Definition
+	Service struct {
+		Type                            string
+		ExecStart, ExecStop, ExecReload string
+		PIDFile                         string
+		Restart                         string
+		RemainAfterExit                 bool
+	}
+}
+
+func Supported(typ string) (is bool) {
+	_, is = supported[typ]
+	return
+}
+
 // Define attempts to fill the sv definition by parsing r
-func (sv *Service) Define(r io.Reader) (err error) {
-	service := Service{}
+func (sv *Unit) Define(r io.Reader) (err error) {
+	def := Definition{}
+	def.Service.Type = DEFAULT_TYPE
 
-	def := &service.Definition
-	def.Service.Type = DEFAULT_SERVICE_TYPE
-
-	if err = ParseDefinition(r, def); err != nil {
+	if err = unit.ParseDefinition(r, &def); err != nil {
 		return
 	}
 
-	merr := MultiError{}
+	merr := unit.MultiError{}
 
 	// Check definition for errors
 	switch {
 	case def.Service.ExecStart == "":
-		merr = append(merr, ParseErr("ExecStart", ErrNotSet))
+		merr = append(merr, unit.ParseErr("ExecStart", unit.ErrNotSet))
 
-	case !SupportedService(def.Service.Type):
-		merr = append(merr, ParseErr("Type", ParseErr(def.Service.Type, ErrNotSupported)))
+	case !Supported(def.Service.Type):
+		merr = append(merr, unit.ParseErr("Type", unit.ParseErr(def.Service.Type, unit.ErrNotSupported)))
 	}
 
 	if len(merr) > 0 {
 		return merr
 	}
 
-	*sv = service
+	sv.Definition = def
 
 	return nil
 }
@@ -78,7 +81,7 @@ func parseCommand(ExecStart string) *exec.Cmd {
 }
 
 // Start executes the command specified in service definition
-func (sv *Service) Start() (err error) {
+func (sv *Unit) Start() (err error) {
 	if sv.Cmd == nil {
 		sv.Cmd = parseCommand(sv.Definition.Service.ExecStart)
 	}
@@ -88,12 +91,12 @@ func (sv *Service) Start() (err error) {
 	case "oneshot":
 		return sv.Cmd.Run()
 	default:
-		return ErrNotSupported
+		return unit.ErrNotSupported
 	}
 }
 
 // Stop stops execution of the command specified in service definition
-func (sv *Service) Stop() (err error) {
+func (sv *Unit) Stop() (err error) {
 	if sv.Cmd == nil {
 		return ErrNotStarted
 	}
@@ -101,28 +104,28 @@ func (sv *Service) Stop() (err error) {
 }
 
 // Active reports activation status of a service
-func (sv Service) Active() Activation {
+func (sv *Unit) Active() unit.Activation {
 	switch {
 	case sv.Cmd == nil, sv.ProcessState == nil:
-		return Inactive
+		return unit.Inactive
 	case sv.ProcessState.Success():
 		switch sv.Definition.Service.Type {
 		case "oneshot":
-			return Active
+			return unit.Active
 		case "simple":
-			return Inactive
+			return unit.Inactive
 		default:
-			return Failed
+			return unit.Failed
 		}
 	case sv.ProcessState.Exited():
-		return Failed
+		return unit.Failed
 	default:
-		return Inactive
+		return unit.Inactive
 	}
 }
 
 // Sub reports the sub status of a service
-func (sv Service) Sub() string {
+func (sv *Unit) Sub() string {
 	//return fmt.Sprint(Dead) // TODO: fix
 	return "TODO: implement"
 }
