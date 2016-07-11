@@ -26,6 +26,9 @@ type Daemon struct {
 	// Map containing pointers to all parsed units, including those failed to load(name -> *Unit)
 	parsed map[string]*Unit
 
+	// Map containing name of each unit (*Unit -> name)
+	names map[*Unit]string
+
 	// Paths, where the unit file specifications get searched for
 	Paths []string
 
@@ -72,6 +75,7 @@ func New() (sys *Daemon) {
 		active: make(map[string]*Unit),
 		loaded: make(map[string]*Unit),
 		parsed: make(map[string]*Unit),
+		names:  make(map[*Unit]string),
 
 		Since: time.Now(),
 		Log:   NewLog(),
@@ -109,22 +113,14 @@ func (sys *Daemon) Start(names ...string) (err error) {
 	}
 
 	for _, u := range ordering {
+		sys.active[sys.nameOf(u)] = u
 		go u.Start()
 	}
 
-	//var job *Job
-	//if job, err = sys.NewJob(start, names...); err != nil {
-	//return
-	//}
-
-	//return job.Start()
-	//t := NewTarget(sys)
-	//th
 	return
 }
 
 func (sys *Daemon) Stop(name string) (err error) {
-
 	return nil
 }
 
@@ -266,7 +262,10 @@ func (sys *Daemon) Load(name string) (u *Unit, err error) {
 			}
 
 			u = NewUnit(v)
+
+			sys.names[u] = name
 			sys.parsed[name] = u
+
 			sys.Log.Debugf("Created a *Unit wrapping %s and put into internal hashmap")
 
 			if name != path {
@@ -468,4 +467,11 @@ func (g *graph) traverse(u *Unit) (err error) {
 	}
 
 	return nil
+}
+
+func (sys *Daemon) nameOf(u *Unit) (name string) {
+	if name, ok := sys.names[u]; ok {
+		return name
+	}
+	panic("Unnamed unit")
 }
