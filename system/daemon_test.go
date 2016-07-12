@@ -1,6 +1,7 @@
 package system
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"github.com/b1101/systemgo/test/mock_unit"
+	"github.com/b1101/systemgo/unit"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -89,11 +91,17 @@ func TestStart(t *testing.T) {
 		"c": mock_unit.NewMockInterface(ctrl),
 	}
 
-	abc["a"].EXPECT().Requires().Return([]string{"b", "c"})
-	abc["b"].EXPECT().Requires().Return([]string{"c"})
+	abc["a"].EXPECT().Requires().Return([]string{"b", "c"}).Times(2)
+	abc["b"].EXPECT().Requires().Return([]string{"c"}).Times(2)
 
-	empty(abc["a"], "wants", "after", "before", "conflicts")
-	empty(abc["b"], "wants", "after", "before", "conflicts")
+	abc["a"].EXPECT().After().Return([]string{"b", "c"}).Times(1)
+	abc["b"].EXPECT().After().Return([]string{"c"}).Times(1)
+
+	abc["b"].EXPECT().Active().Return(unit.Active).Times(1)
+	abc["c"].EXPECT().Active().Return(unit.Active).Times(2)
+
+	empty(abc["a"], "wants", "before", "conflicts")
+	empty(abc["b"], "wants", "before", "conflicts")
 	empty(abc["c"], "wants", "after", "before", "conflicts", "requires")
 
 	for mocks, seq := range map[*map[string]*mock_unit.MockInterface][]string{
@@ -107,11 +115,18 @@ func TestStart(t *testing.T) {
 			sys.names[u] = name
 		}
 
+		fmt.Println("----- Units -----")
+		fmt.Println("pointer\t\tname")
+		for name, u := range sys.loaded {
+			fmt.Printf("%p\t%s\n", u, name)
+		}
+		fmt.Println("-----------------")
+
 		sequence(*mocks, seq)
 
 		assert.NoError(t, sys.Start(seq[0]), "sys.Start("+seq[0]+")")
 
-		time.Sleep(3 * time.Second)
+		time.Sleep(time.Second)
 	}
 }
 
@@ -120,15 +135,22 @@ func sequence(units map[string]*mock_unit.MockInterface, names []string) *gomock
 	case 0:
 		return nil
 	case 1:
+		fmt.Printf("<-%s\n", names[0])
 		return units[names[0]].EXPECT().Start().Return(nil).Times(1)
 	default:
+		fmt.Printf("<-%s", names[0])
 		return units[names[0]].EXPECT().Start().Return(nil).After(sequence(units, names[1:])).Times(1)
 	}
 }
 
 func empty(m *mock_unit.MockInterface, methods ...string) {
 	for _, method := range methods {
-		emptyOne(m, method).Times(1)
+		c := emptyOne(m, method)
+		if method == "requires" {
+			c.Times(2)
+		} else {
+			c.Times(1)
+		}
 	}
 }
 

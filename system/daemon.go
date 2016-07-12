@@ -42,7 +42,25 @@ type Daemon struct {
 	// System log
 	Log *Log
 
-	jobs []unit.Starter
+	jobs []*Job
+}
+
+type Job struct {
+	Type      JobType
+	Mandatory bool
+	Unit      *Unit
+}
+
+type JobType int
+
+const (
+	start JobType = iota
+	stop
+	restart
+)
+
+func (sys *Daemon) addJob(j *Job) {
+
 }
 
 var supported = map[string]bool{
@@ -104,6 +122,7 @@ func (sys *Daemon) Status() (st Status, err error) {
 
 func (sys *Daemon) Start(names ...string) (err error) {
 	log.Debugf("sys.Start names:\n%+v", names)
+
 	var units map[string]*Unit
 	if units, err = sys.loadDeps(names); err != nil {
 		return
@@ -121,6 +140,7 @@ func (sys *Daemon) Start(names ...string) (err error) {
 			log.Debugf("conflicts with %s", dep)
 		}
 		sys.active[sys.nameOf(u)] = u
+		log.Debugf("%p put into sys.active hashmap under name %s", u, sys.nameOf(u))
 		go u.Start()
 	}
 
@@ -359,7 +379,7 @@ func pathset(path string) (definitions []string, err error) {
 	definitions = make([]string, 0, len(names))
 	for _, name := range names {
 		if Supported(name) {
-			definitions = append(definitions, filepath.Clean(path+"/"+name))
+			definitions = append(definitions, filepath.Join(path, name))
 		}
 	}
 
@@ -367,6 +387,8 @@ func pathset(path string) (definitions []string, err error) {
 }
 
 func (sys *Daemon) loadDeps(names []string) (units map[string]*Unit, err error) {
+	log.Debugf("loadDeps names:\n%+v", names)
+
 	units = map[string]*Unit{}
 	added := func(name string) (is bool) {
 		_, is = units[name]
@@ -375,10 +397,11 @@ func (sys *Daemon) loadDeps(names []string) (units map[string]*Unit, err error) 
 
 	var failed bool
 	for len(names) > 0 {
-		var u *Unit
 		name := names[0]
+		log.Debugf("name: %s", name)
 
 		if !added(name) {
+			var u *Unit
 			if u, err = sys.Get(name); err != nil {
 				return nil, fmt.Errorf("Error loading dependency: %s", name)
 			}
@@ -426,6 +449,7 @@ func (sys *Daemon) order(units map[string]*Unit) (ordering []*Unit, err error) {
 	log.Debugf("g.before:\n%+v", g.before)
 
 	for name, unit := range units {
+		log.Debugf("Checking after of %s...", name)
 		for _, depname := range unit.After() {
 			log.Debugf("%s after %s", name, depname)
 			if dep, ok := units[depname]; ok {
@@ -433,15 +457,24 @@ func (sys *Daemon) order(units map[string]*Unit) (ordering []*Unit, err error) {
 			}
 		}
 
+		log.Debugf("Checking before of %s...", name)
 		for _, depname := range unit.Before() {
 			log.Debugf("%s before %s", name, depname)
 			if dep, ok := units[depname]; ok {
 				g.before[dep][name] = unit
 			}
 		}
+
+		log.Debugf("Checking requires of %s...", name)
+		for _, depname := range unit.Requires() {
+			log.Debugf("added %s to %s.requires hashmap", depname, name)
+			unit.requires[depname] = units[depname]
+		}
 	}
 
+	log.Debugf("starting DFS on graph:\n%+v", g)
 	for name, unit := range units {
+		log.Debugf("picking %s", name)
 		if err = g.traverse(unit); err != nil {
 			return nil, fmt.Errorf("Dependency cycle determined:\n%s depends on %s", name, err)
 		}
@@ -453,11 +486,14 @@ func (sys *Daemon) order(units map[string]*Unit) (ordering []*Unit, err error) {
 var errBlank = errors.New("")
 
 func (g *graph) traverse(u *Unit) (err error) {
+	log.Debugf("traverse %p, graph:\n%v", u, g)
 	if _, has := g.ordered[u]; has {
+		log.Debugf("%p already ordered", u)
 		return nil
 	}
 
 	if _, has := g.visited[u]; has {
+		log.Debugf("%p already visited", u)
 		return errBlank
 	}
 
