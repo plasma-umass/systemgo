@@ -21,21 +21,28 @@ type Unit struct {
 	path   string
 	loaded unit.Load
 
-	requires map[string]SubWaiter
+	// Interfaces are too expensive to use?
+	//requires map[string]activeWaiter
+	requires map[string]*Unit
 
 	loading chan struct{}
 }
 
-// Internally used interface exported for mocking
-type SubWaiter interface {
-	unit.Subber
-	Wait()
-}
+//type activeWaiter interface {
+//IsActive() bool
+//Wait()
+//}
 
 func NewUnit(v unit.Interface) (u *Unit) {
+	if debug {
+		defer func() {
+			u.Log.Hooks.Add(&errorHook{fmt.Sprintf("%p", u)})
+		}()
+	}
 	return &Unit{
 		Interface: v,
 		Log:       NewLog(),
+		requires:  map[string]*Unit{},
 	}
 }
 
@@ -109,8 +116,16 @@ func (u *Unit) Wants() (names []string) {
 }
 
 func (u *Unit) Start() (err error) {
-	log.Debugf("Start called on %p - %v", u, u)
-	if u.isLoading() {
+	defer func() {
+		if err != nil {
+			log.Debugf("%p failed to start, error: %s", u, err)
+		} else {
+			log.Debugf("%p started successfully", u)
+		}
+	}()
+
+	log.Debugf("Start called on %p", u)
+	if u.IsLoading() {
 		return ErrIsLoading
 	}
 
@@ -118,6 +133,7 @@ func (u *Unit) Start() (err error) {
 
 	u.loading = make(chan struct{})
 	defer func() {
+		log.Debugf("%p finished loading", u)
 		close(u.loading)
 		u.loading = nil
 	}()
@@ -125,24 +141,24 @@ func (u *Unit) Start() (err error) {
 	wg := &sync.WaitGroup{}
 	for name, dep := range u.requires {
 		wg.Add(1)
-		go func(name string, dep SubWaiter) {
+		go func(name string, dep *Unit) {
 			defer wg.Done()
-			log.Debugf("%p Waiting for %p(%s)", u, dep, name)
+			log.Debugf("%p waiting for %p(%s)", u, dep, name)
 			dep.Wait()
-			if dep.Active() != unit.Active {
+			log.Debugf("%p finished waiting for %p(%s)", u, dep, name)
+			if !dep.IsActive() {
 				u.Log.Printf("Dependency %s failed to start", name)
 				err = ErrDepFail
 			}
 		}(name, dep)
 	}
 
-	log.Debugf("%p Waiting for all required dependencies to finish loading", u)
 	wg.Wait()
+	log.Debugf("All dependencies of %p finished loading", u)
 	if err != nil {
 		return
 	}
 
-	log.Debugf("%p Starting", u)
 	return u.Interface.Start()
 }
 func (u *Unit) Stop() (err error) {
@@ -160,10 +176,10 @@ func (u *Unit) Wait() {
 	return
 }
 
-func (u *Unit) isActive() bool {
+func (u *Unit) IsActive() bool {
 	return u.Active() == unit.Active
 }
-func (u *Unit) isLoading() bool {
+func (u *Unit) IsLoading() bool {
 	return u.loading != nil
 }
 
