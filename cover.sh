@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # Generate test coverage statistics for Go packages.
 #
 # Works around the fact that `go test -coverprofile` currently does not work
@@ -20,11 +20,15 @@ workdir=".cover"
 profile="cover.out"
 mode="atomic"
 
+pkgs=`go list ./... | grep -vE 'vendor|mock|test|cmd'`
+pkg_seq=`tr ' ' ',' <<< ${pkgs}`
+pkg_seq=${pkg_seq%','}
+
 generate_cover_data() {
     mkdir -p "$workdir"
 
     # For each package with test files, run with full coverage (including other packages)
-    go list -f '{{if gt (len .TestGoFiles) 0}}"go test -covermode='${mode}' -coverprofile='${workdir}'/{{.Name}}.coverprofile -coverpkg=./... {{.ImportPath}}"{{end}}' ./... | xargs -I {} bash -c {}
+    go list -f '{{if gt (len .TestGoFiles) 0}}"go test -covermode='${mode}' -coverprofile='${workdir}'/{{.Name}}.coverprofile -coverpkg='${pkg_seq}' {{.ImportPath}}"{{end}}' ${pkgs} | xargs -I {} bash -c {}
 
     # Merge the generated cover profiles into a single file
     gocovmerge `ls $workdir/*.coverprofile` > $profile
