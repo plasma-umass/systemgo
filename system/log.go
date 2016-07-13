@@ -3,7 +3,6 @@ package system
 import (
 	"bytes"
 	"io"
-	"os"
 
 	log "github.com/Sirupsen/logrus"
 )
@@ -12,12 +11,6 @@ import (
 const BUFFER_SIZE = 10000
 
 var debug bool
-
-func init() {
-	if os.Getenv("SYSTEMGO_DEBUG") == "1" {
-		log.SetLevel(log.DebugLevel)
-	}
-}
 
 type errorHook struct {
 	Source string
