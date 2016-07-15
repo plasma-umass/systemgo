@@ -16,6 +16,8 @@ var ErrIsLoading = errors.New("Unit is already loading")
 type Unit struct {
 	unit.Interface
 
+	name string
+
 	Log *Log
 
 	path   string

@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/b1101/systemgo/unit"
@@ -14,6 +15,8 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 )
+
+var ErrDepConflict = fmt.Errorf("Error stopping conflicting unit")
 
 var DEFAULT_PATHS = []string{"/etc/systemd/system/", "/run/systemd/system", "/lib/systemd/system"}
 
@@ -42,26 +45,101 @@ type Daemon struct {
 	// System log
 	Log *Log
 
-	jobs []*Job
+	Jobs Jobs
 }
 
-type Job struct {
-	Type      JobType
-	Mandatory bool
-	Unit      *Unit
+type Jobs struct {
+	sync.Mutex
+
+	assigned map[*Unit]job
+
+	failed map[*Unit]bool
+
+	units chan *Unit
 }
 
-type JobType int
+func (jobs *Jobs) Len() (n int) {
+	return len(jobs.assigned)
+}
+
+func (jobs *Jobs) Failed() (n int) {
+	return len(jobs.failed)
+}
+
+func (jobs *Jobs) Assign(u *Unit, j job) {
+	jobs.Lock()
+	defer jobs.Unlock()
+
+	assigned, has := jobs.assigned[u]
+	if !has {
+		log.Debugf("Assigned a new job(%v) for %p", j, u)
+		jobs.assigned[u] = j
+		jobs.units <- u
+		return
+	}
+
+	log.Debugf("A job for %p has already been assigned", u)
+
+	switch {
+	case assigned == stop && j == start:
+		jobs.assigned[u] = restart
+
+	case assigned == start && j == stop:
+		delete(jobs.assigned, u)
+
+	default:
+		jobs.assigned[u] = j
+	}
+}
+
+func (sys *Daemon) doJobs() {
+	for u := range sys.Jobs.units {
+		log.Debugf("sys.work() unit: %p", u)
+
+		go func(u *Unit) {
+			sys.Jobs.Lock()
+			defer sys.Jobs.Unlock()
+
+			if j, has := sys.Jobs.assigned[u]; has {
+				if err := sys.do(u, j); err != nil {
+					log.Debugf("Job for %p failed to execute: %s", u, err)
+					sys.Jobs.failed[u] = true
+				}
+				delete(sys.Jobs.assigned, u)
+			}
+		}(u)
+	}
+}
+
+func (sys *Daemon) do(u *Unit, j job) (err error) {
+	switch j {
+	case start:
+		if err = u.Start(); err == nil {
+			sys.active[sys.nameOf(u)] = u
+		}
+		return
+	case stop:
+		if err = u.Stop(); err == nil {
+			delete(sys.active, sys.nameOf(u))
+		}
+		return
+	case restart:
+		if err = sys.do(u, stop); err == nil {
+			err = sys.do(u, start)
+		}
+		return
+	default:
+		panic("Unknown job type")
+	}
+}
+
+type job int
 
 const (
-	start JobType = iota
+	start job = iota
 	stop
 	restart
 )
-
-func (sys *Daemon) addJob(j *Job) {
-
-}
 
 var supported = map[string]bool{
 	".service": true,
@@ -84,6 +162,8 @@ func Supported(filename string) bool {
 
 func New() (sys *Daemon) {
 	defer func() {
+		go sys.doJobs()
+
 		if debug {
 			sys.Log.Logger.Hooks.Add(&errorHook{
 				Source: "system",
@@ -99,6 +179,11 @@ func New() (sys *Daemon) {
 		Since: time.Now(),
 		Log:   NewLog(),
 		Paths: DEFAULT_PATHS,
+
+		Jobs: Jobs{
+			units:    make(chan *Unit),
+			assigned: map[*Unit]job{},
+		},
 	}
 }
 
@@ -136,26 +221,46 @@ func (sys *Daemon) Start(names ...string) (err error) {
 	log.Debugf("sys.order returned:\n%+v, nil", ordering)
 
 	for _, u := range ordering {
-		for _, dep := range u.Conflicts() {
-			log.Debugf("conflicts with %s", dep)
+		wg := &sync.WaitGroup{}
+		for _, name := range u.Conflicts() {
+			log.Debugf("%p conflicts with %s", u, name)
+			wg.Add(1)
+			go func() {
+				if err = sys.Stop(name); err != nil && err != ErrNotFound {
+					u.Log.Printf("Error stopping %s: %s", name, err)
+				}
+				wg.Done()
+			}()
+
 		}
+		wg.Wait()
+		if err != nil {
+			return ErrDepConflict
+		}
+
 		sys.active[sys.nameOf(u)] = u
+
 		log.Debugf("%p put into sys.active hashmap under name %s", u, sys.nameOf(u))
-		go u.Start()
+		sys.Jobs.Assign(u, start)
 	}
 
 	return
 }
 
 func (sys *Daemon) Stop(name string) (err error) {
-	return nil
+	log.Debugf("sys.Stop name: %s", name)
+
+	if u, ok := sys.active[name]; ok {
+		sys.Jobs.Assign(u, stop)
+	}
+	return
 }
 
 func (sys *Daemon) Restart(name string) (err error) {
-	if err = sys.Stop(name); err != nil {
-		return
+	if u, ok := sys.active[name]; ok {
+		sys.Jobs.Assign(u, restart)
 	}
-	return sys.Start(name)
+	return
 }
 
 func (sys *Daemon) Reload(name string) (err error) {
@@ -398,7 +503,6 @@ func (sys *Daemon) loadDeps(names []string) (units map[string]*Unit, err error) 
 	var failed bool
 	for len(names) > 0 {
 		name := names[0]
-		log.Debugf("name: %s", name)
 
 		if !added(name) {
 			var u *Unit
@@ -486,7 +590,7 @@ func (sys *Daemon) order(units map[string]*Unit) (ordering []*Unit, err error) {
 var errBlank = errors.New("")
 
 func (g *graph) traverse(u *Unit) (err error) {
-	log.Debugf("traverse %p, graph:\n%v", u, g)
+	log.Debugf("traverse %p, graph %p, ordering:\n%v", u, g, g.ordering)
 	if _, has := g.ordered[u]; has {
 		log.Debugf("%p already ordered", u)
 		return nil
