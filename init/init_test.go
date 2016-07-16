@@ -31,6 +31,7 @@ var cases = map[string][]struct {
 			"b.service",
 			[]byte(`[Unit]
 			Description=b.service
+			RemainAfterExit=yes
 			[Service]
 			Type=oneshot
 			ExecStart=/bin/echo test`),
@@ -112,7 +113,7 @@ func TestBoot(t *testing.T) {
 
 			u.Wait()
 			fmt.Println(u.Status())
-			assert.Equal(t, u.Active(), unit.Active, fmt.Sprintf("%s - %s", c.name, u.Active()))
+			assert.Equal(t, unit.Active, u.Active(), fmt.Sprintf("%s - %s", c.name, u.Active()))
 		}
 	}
 }
