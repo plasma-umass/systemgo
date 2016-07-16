@@ -18,6 +18,7 @@ import (
 
 var ErrDepConflict = fmt.Errorf("Error stopping conflicting unit")
 var ErrNotActive = fmt.Errorf("Unit is not active")
+var ErrExists = fmt.Errorf("Unit already exists")
 
 var DEFAULT_PATHS = []string{"/etc/systemd/system/", "/run/systemd/system", "/lib/systemd/system"}
 
@@ -48,7 +49,7 @@ type Daemon struct {
 
 func New() (sys *Daemon) {
 	defer func() {
-		go sys.doJobs()
+		go sys.dispatchJobs()
 
 		if debug {
 			sys.Log.Logger.Hooks.Add(&errorHook{
@@ -109,117 +110,141 @@ func Supported(filename string) bool {
 	return SupportedSuffix(filepath.Ext(filename))
 }
 
-type Jobs struct {
-	sync.Mutex
-
-	assigned map[*Unit]Job
-
-	failed map[*Unit]bool
-
-	units chan *Unit
+// IsEnabled returns enable state of the unit held in-memory under specified name
+// If error is returned, it is going to be ErrNotFound
+func (sys *Daemon) IsEnabled(name string) (st unit.Enable, err error) {
+	//var u *Unit
+	//if u, err = sys.Unit(name); err == nil && sys.Enabled[u] {
+	//st = unit.Enabled
+	//}
+	return unit.Enabled, ErrNotImplemented
 }
 
-type Job int
-
-//go:generate stringer -type=Job
-const (
-	start Job = iota
-	stop
-	restart
-)
-
-func (jobs *Jobs) Len() (n int) {
-	return len(jobs.assigned)
+// IsActive returns activation state of the unit held in-memory under specified name
+// If error is returned, it is going to be ErrNotFound
+func (sys *Daemon) IsActive(name string) (st unit.Activation, err error) {
+	var u *Unit
+	if u, err = sys.Get(name); err == nil {
+		st = u.Active()
+	}
+	return
 }
 
-func (jobs *Jobs) Failed() (n int) {
-	return len(jobs.failed)
-}
-
-func (jobs *Jobs) Assign(u *Unit, job Job) {
-	jobs.Lock()
-	log.Debugln("j.Assign locked")
-	defer jobs.Unlock()
-
-	assigned, has := jobs.assigned[u]
-	if !has {
-		log.Debugf("Assigned a new job(%v) for %p", job, u)
-		jobs.assigned[u] = job
-		jobs.units <- u
+// StatusOf returns status of the unit held in-memory under specified name
+// If error is returned, it is going to be ErrNotFound
+func (sys *Daemon) StatusOf(name string) (st unit.Status, err error) {
+	var u *Unit
+	if u, err = sys.Get(name); err != nil {
 		return
 	}
 
-	log.Debugf("A job for %p has already been assigned", u)
+	st = unit.Status{
+		Load: unit.LoadStatus{
+			Path:   u.Path(),
+			Loaded: u.Loaded(),
+			State:  unit.Enabled,
+		},
+		Activation: unit.ActivationStatus{
+			State: u.Active(),
+			Sub:   u.Sub(),
+		},
+	}
 
-	switch {
-	case assigned == stop && job == start:
-		jobs.assigned[u] = restart
+	st.Log, err = ioutil.ReadAll(u.Log)
 
-	case assigned == start && job == stop:
-		delete(jobs.assigned, u)
+	return
+}
 
-	default:
-		jobs.assigned[u] = job
+//func (sys Daemon) WriteStatus(output io.Writer, names ...string) (err error) {
+//if len(names) == 0 {
+//w := tabwriter.Writer
+//out += fmt.Sprintln("unit\t\t\t\tload\tactive\tsub\tdescription")
+//out += fmt.Sprintln(s.Units)
+//}
+
+//func (us units) String() (out string) {
+//for _, u := range us {
+//out += fmt.Sprintf("%s\t%s\t%s\t%s\t%s\t\n",
+//u.Name(), u.Loaded(), u.Active(), u.Sub(), u.Description())
+//}
+//return
+//}
+
+func (sys *Daemon) Supervise(name string, uInt unit.Interface) (u *Unit, err error) {
+	u = NewUnit(uInt)
+	u.name = name
+	if _, exists := sys.units[name]; exists {
+		return nil, ErrExists
+	}
+	sys.units[name] = u
+
+	log.WithFields(log.Fields{
+		"unit": name,
+	}).Debugf("Created new *Unit")
+
+	return
+}
+
+// Get looks up the unit name in the internal hasmap of loaded units and calls
+// sys.Load(name) if it can not be found
+// If error is returned, it will be error from sys.Load(name)
+func (sys *Daemon) Get(name string) (u *Unit, err error) {
+	var ok bool
+	if u, ok = sys.units[name]; !ok || !sys.loaded[u] {
+		return sys.Load(name)
+	}
+	return
+}
+
+func (sys *Daemon) Restart(u *Unit) (err error) {
+	if !sys.active[u] {
+		return ErrNotActive
+	}
+	sys.Jobs.Assign(u, restart)
+	return
+}
+
+func (sys *Daemon) Reload(u *Unit) (err error) {
+	if reloader, ok := u.Interface.(unit.Reloader); !ok {
+		return ErrNoReload
+	} else {
+		return reloader.Reload()
 	}
 }
 
-func (sys *Daemon) doJobs() {
-	for u := range sys.Jobs.units {
-		log.WithFields(log.Fields{
-			"func": "doJob", "unit": u.name,
-		}).Debugln("dispatching job in new goroutine")
-
-		go func(u *Unit) {
-			sys.Jobs.Lock()
-			log.Debugf("doJobs locked")
-			if j, has := sys.Jobs.assigned[u]; has {
-				if err := sys.do(u, j); err != nil {
-					log.Debugf("Job for %p failed to execute: %s", u, err)
-					log.WithField("unit", u.name)
-					sys.Jobs.failed[u] = true
-				}
-				delete(sys.Jobs.assigned, u)
-			}
-			sys.Jobs.Unlock()
-			log.Debugf("doJobs unlocked")
-		}(u)
-	}
+// TODO
+func (sys *Daemon) Enable(u *Unit) (err error) {
+	u.Log.Println("enable")
+	return ErrNotImplemented
 }
 
-func (sys *Daemon) do(u *Unit, job Job) (err error) {
-	switch job {
-	case start:
-		if err = u.Start(); err == nil {
-			log.Debugf("%p put into sys.active hashmap under name %s", u, u.name)
-			sys.active[u] = true
-		}
-		return
-	case stop:
-		if err = u.Stop(); err == nil {
-			delete(sys.active, u)
-		}
-		return
-	case restart:
-		if err = sys.do(u, stop); err == nil {
-			err = sys.do(u, start)
-		}
-		return
-	default:
-		panic("Unknown job type")
-	}
+// TODO
+func (sys *Daemon) Disable(u *Unit) (err error) {
+	u.Log.Println("disable")
+	return ErrNotImplemented
 }
 
-func (sys *Daemon) Start(names ...string) (err error) {
-	log.Debugf("sys.Start names:\n%+v", names)
+func (sys *Daemon) Stop(u *Unit) (err error) {
+	log.Debugf("sys.Stop name: %s", u.name)
 
-	var units map[string]*Unit
-	if units, err = sys.loadDeps(names); err != nil {
+	if !sys.active[u] {
+		return ErrNotActive
+	}
+	if err = u.Stop(); err == nil {
+		delete(sys.active, u)
+	}
+	return
+}
+
+func (sys *Daemon) Start(units ...*Unit) (err error) {
+	var deps map[string]*Unit
+	if deps, err = sys.loadDeps(units); err != nil {
 		return
 	}
 	log.Debugf("sys.loadDeps returned:\n%+v, nil", units)
 
 	var ordering []*Unit
-	if ordering, err = sys.order(units); err != nil {
+	if ordering, err = sys.order(deps); err != nil {
 		return
 	}
 	log.Debugf("sys.order returned:\n%+v, nil", ordering)
@@ -251,113 +276,14 @@ func (sys *Daemon) Start(names ...string) (err error) {
 	return
 }
 
-func (sys *Daemon) Stop(u *Unit) (err error) {
-	log.Debugf("sys.Stop name: %s", u.name)
-
-	if !sys.active[u] {
-		return ErrNotActive
-	}
-	sys.Jobs.Assign(u, stop)
-	return
-}
-
-func (sys *Daemon) Restart(u *Unit) (err error) {
-	if !sys.active[u] {
-		return ErrNotActive
-	}
-	sys.Jobs.Assign(u, restart)
-	return
-}
-
-func (sys *Daemon) Reload(u *Unit) (err error) {
-	if reloader, ok := u.Interface.(unit.Reloader); !ok {
-		return ErrNoReload
-	} else {
-		return reloader.Reload()
-	}
-}
-
-// TODO
-func (sys *Daemon) Enable(name string) (err error) {
-	var u *Unit
-	if u, err = sys.Get(name); err != nil {
-		return
-	}
-	u.Log.Println("enable")
-	return ErrNotImplemented
-}
-
-// TODO
-func (sys *Daemon) Disable(name string) (err error) {
-	var u *Unit
-	if u, err = sys.Get(name); err != nil {
-		return
-	}
-	u.Log.Println("disable")
-	return ErrNotImplemented
-}
-
-// IsEnabled returns enable state of the unit held in-memory under specified name
-// If error is returned, it is going to be ErrNotFound
-func (sys *Daemon) IsEnabled(name string) (st unit.Enable, err error) {
-	//var u *Unit
-	//if u, err = sys.Unit(name); err == nil && sys.Enabled[u] {
-	//st = unit.Enabled
-	//}
-	return unit.Enabled, ErrNotImplemented
-}
-
-// IsActive returns activation state of the unit held in-memory under specified name
-// If error is returned, it is going to be ErrNotFound
-func (sys *Daemon) IsActive(name string) (st unit.Activation, err error) {
-	var u *Unit
-	if u, err = sys.Get(name); err == nil {
-		st = u.Active()
-	}
-	return
-}
-
-var std = New()
-
-// Get looks up the unit name in the internal hasmap of loaded units and calls
-// sys.Load(name) if it can not be found
-// If error is returned, it will be error from sys.Load(name)
-func (sys *Daemon) Get(name string) (u *Unit, err error) {
-	var ok bool
-	if u, ok = sys.units[name]; !ok {
-		u, err = sys.Load(name)
-	}
-	return
-}
-
-// StatusOf returns status of the unit held in-memory under specified name
-// If error is returned, it is going to be ErrNotFound
-func (sys *Daemon) StatusOf(name string) (st unit.Status, err error) {
-	var u *Unit
-	if u, err = sys.Get(name); err != nil {
-		return
-	}
-
-	st = unit.Status{
-		Load: unit.LoadStatus{
-			Path:   u.Path(),
-			Loaded: u.Loaded(),
-			State:  unit.Enabled,
-		},
-		Activation: unit.ActivationStatus{
-			State: u.Active(),
-			Sub:   u.Sub(),
-		},
-	}
-
-	st.Log, err = ioutil.ReadAll(u.Log)
-
-	return
-}
-
 // Load searches for a definition of unit name in configured paths parses it and returns a pointer to Unit
-// If a unit name has already been parsed(tried to load) by sys, it will not create a new unit, but return a pointer to that unit instead
+// If a unit name has already been parsed(tried to load) by sys, it will not create a new unit, but return a pointer to already created unit instead
 func (sys *Daemon) Load(name string) (u *Unit, err error) {
+	log.WithField("name", name).Debugln("Load")
+
+	var parsed bool
+	u, parsed = sys.units[name]
+
 	if !Supported(name) {
 		return nil, ErrUnknownType
 	}
@@ -382,8 +308,7 @@ func (sys *Daemon) Load(name string) (u *Unit, err error) {
 		}
 		defer file.Close()
 
-		var parsed bool
-		if u, parsed = sys.units[name]; !parsed {
+		if !parsed {
 			var v unit.Interface
 			switch filepath.Ext(path) {
 			case ".target":
@@ -396,13 +321,9 @@ func (sys *Daemon) Load(name string) (u *Unit, err error) {
 				panic("Trying to load an unsupported unit type")
 			}
 
-			u = NewUnit(v)
-			u.name = name
-			log.WithFields(log.Fields{
-				"unit": name,
-			}).Debugf("Created new *Unit")
-
-			sys.units[name] = u
+			if u, err = sys.Supervise(name, v); err != nil {
+				return
+			}
 
 			if name != path {
 				sys.units[path] = u
@@ -442,21 +363,6 @@ func (sys *Daemon) Load(name string) (u *Unit, err error) {
 	return nil, ErrNotFound
 }
 
-//func (sys Daemon) WriteStatus(output io.Writer, names ...string) (err error) {
-//if len(names) == 0 {
-//w := tabwriter.Writer
-//out += fmt.Sprintln("unit\t\t\t\tload\tactive\tsub\tdescription")
-//out += fmt.Sprintln(s.Units)
-//}
-
-//func (us units) String() (out string) {
-//for _, u := range us {
-//out += fmt.Sprintf("%s\t%s\t%s\t%s\t%s\t\n",
-//u.Name(), u.Loaded(), u.Active(), u.Sub(), u.Description())
-//}
-//return
-//}
-
 // pathset returns a slice of paths to definitions of supported unit types found in path specified
 func pathset(path string) (definitions []string, err error) {
 	var file *os.File
@@ -487,16 +393,118 @@ func pathset(path string) (definitions []string, err error) {
 	return
 }
 
-func (sys *Daemon) loadDeps(names []string) (units map[string]*Unit, err error) {
-	log.Debugf("loadDeps names:\n%+v", names)
+type Jobs struct {
+	sync.Mutex
 
-	units = map[string]*Unit{}
+	assigned map[*Unit]Job
+
+	failed map[*Unit]bool
+
+	units chan *Unit
+}
+
+type Job int
+
+//go:generate stringer -type=Job
+const (
+	start Job = iota
+	stop
+	restart
+)
+
+func (jobs *Jobs) Len() (n int) {
+	return len(jobs.assigned)
+}
+
+func (jobs *Jobs) Failed() (n int) {
+	return len(jobs.failed)
+}
+
+func (jobs *Jobs) Assign(u *Unit, job Job) {
+	jobs.Lock()
+	log.WithField("func", "Assign").Debugf("locked")
+
+	assigned, has := jobs.assigned[u]
+	if !has {
+		log.Debugf("Assigned a new job(%s) for %s", job, u.name)
+		jobs.assigned[u] = job
+
+		jobs.Unlock()
+		log.WithField("func", "Assign").Debugf("unlocked")
+
+		jobs.units <- u
+		return
+	}
+
+	defer jobs.Unlock()
+
+	switch {
+	case assigned == stop && job == start:
+		log.Debugf("A job for %s has already been assigned", u.name)
+		jobs.assigned[u] = restart
+
+	case assigned == start && job == stop:
+		delete(jobs.assigned, u)
+
+	default:
+		jobs.assigned[u] = job
+	}
+}
+
+func (sys *Daemon) dispatchJobs() {
+	for u := range sys.Jobs.units {
+		sys.Jobs.Lock()
+		log.WithField("func", "dispatchJobs").Debugf("locked")
+		if j, has := sys.Jobs.assigned[u]; has {
+			go sys.dispatch(u, j)
+			delete(sys.Jobs.assigned, u)
+		}
+		sys.Jobs.Unlock()
+		log.WithField("func", "dispatchJobs").Debugf("unlocked")
+	}
+}
+
+func (sys *Daemon) dispatch(u *Unit, job Job) (err error) {
+	defer func() {
+		if err != nil {
+			log.WithField("unit", u.name).Debugf("Job failed to execute")
+			sys.Jobs.failed[u] = true
+		}
+	}()
+	log.WithField("unit", u.name).Debugf("Dispatching a new %s job", job)
+	switch job {
+	case start:
+		if err = u.Start(); err == nil {
+			sys.active[u] = true
+		}
+		return
+	case stop:
+		return sys.Stop(u)
+	case restart:
+		if err = sys.dispatch(u, stop); err == nil {
+			err = sys.dispatch(u, start)
+		}
+		return
+	default:
+		panic("Unknown job type")
+	}
+}
+
+// returns a map (name -> *Unit) containing dependencies and specified units
+func (sys *Daemon) loadDeps(units []*Unit) (deps map[string]*Unit, err error) {
+	deps = map[string]*Unit{}
 	added := func(name string) (is bool) {
-		_, is = units[name]
+		_, is = deps[name]
 		return
 	}
 
 	var failed bool
+
+	names := make([]string, len(units))
+	for i, u := range units {
+		names[i] = u.name
+	}
+
 	for len(names) > 0 {
 		name := names[0]
 
@@ -505,13 +513,13 @@ func (sys *Daemon) loadDeps(names []string) (units map[string]*Unit, err error) 
 			if u, err = sys.Get(name); err != nil {
 				return nil, fmt.Errorf("Error loading dependency: %s", name)
 			}
-			units[name] = u
+			deps[name] = u
 
 			names = append(names, u.Requires()...)
 
 			for _, name := range u.Wants() {
 				if !added(name) {
-					units[name], _ = sys.Get(name)
+					deps[name], _ = sys.Get(name)
 				}
 			}
 		}
