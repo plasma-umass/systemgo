@@ -1,46 +1,29 @@
 package system
 
-import "github.com/b1101/systemgo/unit"
+import (
+	"fmt"
 
-// Supervisable is an interface that makes different fields of the underlying definition accesible
+	"github.com/b1101/systemgo/unit"
+)
+
+// Supervisable represents anything that can be supervised by an instance of a system.Interface
 type Supervisable interface {
-	Description() string
-	Documentation() string
-
-	Wants() []string
-	Requires() []string
-	Before() []string
-	After() []string
-	Conflicts() []string
-
-	WantedBy() []string
-	RequiredBy() []string
+	unit.Interface
+	Statuser
 }
 
-type Daemon interface {
-	Start(...string) error
-	Stop(string) error
-	Restart(string) error
-	Reload(string) error
-	Enable(string) error
-	Disable(string) error
-
-	Status() (Status, error)
-	StatusOf(string) (unit.Status, error)
-	IsEnabled(string) (unit.Enable, error)
-	IsActive(string) (unit.Activation, error)
-
-	SetPaths(...string)
+// Statuser is implemented by anything that can report its' own status
+type Statuser interface {
+	Status() fmt.Stringer
 }
 
-type Manager interface {
-	Get(string) (*Unit, error)
-	NewJob(JobType, ...string) (*Job, error)
-}
-
-type Loader interface {
-	Load(string) (*Unit, error)
-}
+// Daemon represents the system as seen from 'outer scope'.
+// Manages instances of unit.Interface and operates on them by name.
+// Provides handlers for system control and is meant to be exposed
+// to the 'init' package, or anything else that could want to use it
 type Getter interface {
 	Get(string) (*Unit, error)
+}
+type Loader interface {
+	Load(string) (*Unit, error)
 }

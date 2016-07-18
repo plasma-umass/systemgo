@@ -1,88 +1,100 @@
 package system
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 
+	log "github.com/Sirupsen/logrus"
 	"github.com/b1101/systemgo/unit"
 )
 
+var ErrIsLoading = errors.New("Unit is already loading")
+
 type Unit struct {
-	Supervisable
+	unit.Interface
 
 	Log *Log
 
 	path   string
 	loaded unit.Load
 
-	system *System
+	// Interfaces are too expensive to use?
+	//requires map[string]activeWaiter
+	requires map[string]*Unit
 
 	loading chan struct{}
 }
 
-func (sys *System) NewUnit(sup Supervisable) (u *Unit) {
-	return &Unit{
-		Supervisable: sup,
-		Log:          NewLog(),
+//type activeWaiter interface {
+//IsActive() bool
+//Wait()
+//}
 
-		system:  sys,
-		loading: make(chan struct{}),
+func NewUnit(v unit.Interface) (u *Unit) {
+	if debug {
+		defer func() {
+			u.Log.Hooks.Add(&errorHook{fmt.Sprintf("%p", u)})
+		}()
+	}
+	return &Unit{
+		Interface: v,
+		Log:       NewLog(),
+		requires:  map[string]*Unit{},
 	}
 }
 
-func (u Unit) Path() string {
+func (u *Unit) Path() string {
 	return u.path
 }
-func (u Unit) Loaded() unit.Load {
+func (u *Unit) Loaded() unit.Load {
 	return u.loaded
 }
-func (u Unit) Description() string {
-	if u.Supervisable == nil {
-		return ""
-	}
 
-	return u.Supervisable.Description()
+func (u *Unit) Status() fmt.Stringer {
+	st := unit.Status{
+		Load: unit.LoadStatus{
+			Path:   u.Path(),
+			Loaded: u.Loaded(),
+			State:  unit.Enabled,
+		},
+		Activation: unit.ActivationStatus{
+			State: u.Active(),
+			Sub:   u.Sub(),
+		},
+	}
+	// TODO deal with different unit types requiring different status
+	// something like u.Interface.HasX() ?
+	switch u.Interface.(type) {
+	//case *unit.Service:
+	//return unit.ServiceStatus{st}
+	default:
+		return st
+	}
 }
 
-func (u Unit) Active() unit.Activation {
-	if u.Supervisable == nil {
+func (u *Unit) Active() unit.Activation {
+	if u.Interface == nil {
 		return unit.Inactive
+	} else {
+		return u.Interface.Active()
 	}
-
-	if u.loading != nil {
-		return unit.Activating
-	}
-
-	if subber, ok := u.Supervisable.(unit.Subber); ok {
-		return subber.Active()
-	}
-
-	for _, name := range u.Requires() {
-		if dep, err := u.system.Get(name); err != nil || !dep.isActive() {
-			return unit.Inactive
-		}
-	}
-
-	return unit.Active
 }
 
-func (u Unit) Sub() string {
-	if u.Supervisable == nil {
+func (u *Unit) Sub() string {
+	if u.Interface == nil {
 		return "dead"
+	} else {
+		return u.Interface.Sub()
 	}
-
-	if subber, ok := u.Supervisable.(unit.Subber); ok {
-		return subber.Sub()
-	}
-
-	return u.Active().String()
 }
 
+// Requires returns a slice of unit names as found in definition and absolute paths
+// of units symlinked in units '.wants' directory
 func (u *Unit) Requires() (names []string) {
-	if u.Supervisable != nil {
-		names = u.Supervisable.Requires()
-	}
+	names = u.Interface.Requires()
 
 	if paths, err := u.parseDepDir(".requires"); err == nil {
 		names = append(names, paths...)
@@ -91,16 +103,84 @@ func (u *Unit) Requires() (names []string) {
 	return
 }
 
+// Wants returns a slice of unit names as found in definition and absolute paths
+// of units symlinked in units '.wants' directory
 func (u *Unit) Wants() (names []string) {
-	if u.Supervisable != nil {
-		names = u.Supervisable.Wants()
-	}
+	names = u.Interface.Wants()
 
 	if paths, err := u.parseDepDir(".wants"); err == nil {
 		names = append(names, paths...)
 	}
 
 	return
+}
+
+func (u *Unit) Start() (err error) {
+	defer func() {
+		if err != nil {
+			log.Debugf("%p failed to start, error: %s", u, err)
+		} else {
+			log.Debugf("%p started successfully", u)
+		}
+	}()
+
+	log.Debugf("Start called on %p", u)
+	if u.IsLoading() {
+		return ErrIsLoading
+	}
+
+	u.Log.Println("Starting...")
+
+	u.loading = make(chan struct{})
+	defer func() {
+		log.Debugf("%p finished loading", u)
+		close(u.loading)
+		u.loading = nil
+	}()
+
+	wg := &sync.WaitGroup{}
+	for name, dep := range u.requires {
+		wg.Add(1)
+		go func(name string, dep *Unit) {
+			defer wg.Done()
+			log.Debugf("%p waiting for %p(%s)", u, dep, name)
+			dep.Wait()
+			log.Debugf("%p finished waiting for %p(%s)", u, dep, name)
+			if !dep.IsActive() {
+				u.Log.Printf("Dependency %s failed to start", name)
+				err = ErrDepFail
+			}
+		}(name, dep)
+	}
+
+	wg.Wait()
+	log.Debugf("All dependencies of %p finished loading", u)
+	if err != nil {
+		return
+	}
+
+	return u.Interface.Start()
+}
+func (u *Unit) Stop() (err error) {
+	if u.Interface == nil {
+		return ErrNotLoaded
+	}
+
+	return u.Interface.Stop()
+}
+func (u *Unit) Wait() {
+	if u.loading == nil {
+		return
+	}
+	<-u.loading
+	return
+}
+
+func (u *Unit) IsActive() bool {
+	return u.Active() == unit.Active
+}
+func (u *Unit) IsLoading() bool {
+	return u.loading != nil
 }
 
 func (u *Unit) parseDepDir(suffix string) (paths []string, err error) {
@@ -122,62 +202,5 @@ func (u *Unit) parseDepDir(suffix string) (paths []string, err error) {
 		}
 		paths = append(paths, path)
 	}
-	return
-}
-
-func (u *Unit) Start() (err error) {
-	if Debug {
-		bug.Println("*Unit is ", u)
-	}
-
-	u.loading = make(chan struct{})
-	defer close(u.loading)
-
-	u.Log.Println("Starting unit...")
-
-	// TODO: stop conflicted units before starting(divide jobs and use transactions like systemd?)
-	u.Log.Println("Checking Conflicts...")
-	for _, name := range u.Conflicts() {
-		if dep, _ := u.system.Get(name); dep != nil && dep.isActive() {
-			return fmt.Errorf("Unit conflicts with %s", name)
-		}
-	}
-
-	u.Log.Println("Checking Requires...")
-	for _, name := range u.Requires() {
-		var dep *Unit
-		if dep, err = u.system.Get(name); err != nil {
-			return fmt.Errorf("Error loading dependency %s: %s", name, err)
-		}
-
-		if !dep.isActive() {
-			dep.waitFor()
-			if !dep.isActive() {
-				return fmt.Errorf("Dependency %s failed to start", name)
-			}
-		}
-	}
-
-	if u.Supervisable == nil {
-		return ErrNotLoaded
-	}
-
-	if starter, ok := u.Supervisable.(unit.Starter); ok {
-		err = starter.Start()
-	}
-	return
-}
-
-func (u *Unit) Stop() (err error) {
-	return ErrNotImplemented
-}
-func (u Unit) isActive() bool {
-	return u.Active() == unit.Active
-}
-func (u Unit) isLoading() bool {
-	return u.Active() == unit.Activating
-}
-func (u Unit) waitFor() {
-	<-u.loading
 	return
 }

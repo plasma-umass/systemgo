@@ -11,7 +11,7 @@ import (
 )
 
 // TODO: introduce proper configuration
-type config struct {
+type Configuration struct {
 	// Default target
 	Target string
 
@@ -38,10 +38,10 @@ func (p Port) String() string {
 
 var (
 	// Instance of a system
-	sys *system.Daemon
+	System *system.Daemon
 
 	// Default configuration
-	conf *config = &config{
+	Conf = &Configuration{
 		Target: "default.target",
 		Method: "http",
 		httpConfig: &httpConfig{
@@ -61,15 +61,15 @@ var (
 // boot initializes the system, sets the default paths, as specified in configuration and attempts to start the default target, falls back to "rescue.target", if it fails
 func Boot() {
 	// Initialize system
-	sys = system.New()
+	System = system.New()
 
-	sys.SetPaths(conf.Paths...)
+	System.SetPaths(Conf.Paths...)
 
 	// Start the default target
-	if err := sys.Start(conf.Target); err != nil {
-		//sys.Log.Printf("Error starting default target %s: %s", conf.Target, err)
-		log.Printf("Error starting default target %s: %s", conf.Target, err)
-		if err = sys.Start("rescue.target"); err != nil {
+	if err := System.Start(Conf.Target); err != nil {
+		//sys.Log.Printf("Error starting default target %s: %s", Conf.Target, err)
+		log.Printf("Error starting default target %s: %s", Conf.Target, err)
+		if err = System.Start("rescue.target"); err != nil {
 			//sys.Log.Printf("Error starting rescue target %s: %s", "rescue.target", err)
 			log.Printf("Error starting rescue target %s: %s", "rescue.target", err)
 		}
@@ -78,10 +78,10 @@ func Boot() {
 
 // Listen for systemctl requests
 func Serve() {
-	switch conf.Method {
+	switch Conf.Method {
 	case "http":
-		if err := listenHTTP(conf.Port.String()); err != nil {
-			log.Fatalf("Error starting server on %s: %s", conf.Port, err)
+		if err := listenHTTP(Conf.Port.String()); err != nil {
+			log.Fatalf("Error starting server on %s: %s", Conf.Port, err)
 		}
 	}
 }
@@ -90,7 +90,7 @@ func Serve() {
 func listenHTTP(addr string) (err error) {
 	server := http.NewServeMux()
 
-	for name, handler := range systemctl.Handlers(sys) {
+	for name, handler := range systemctl.Handlers(System) {
 		func(handler systemctl.Handler) {
 			server.HandleFunc("/"+name, func(w http.ResponseWriter, req *http.Request) {
 				//msg := []systemctl.Response{}

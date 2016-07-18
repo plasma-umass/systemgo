@@ -37,9 +37,10 @@ ABS_INIT=$(ABS_REPO)/$(INIT)
 ABS_SYSTEM=$(ABS_REPO)/$(SYSTEM)
 ABS_SYSTEMCTL=$(ABS_REPO)/$(SYSTEMCTL)
 
-MOCK_PKGS=mock_system mock_unit
-system_interfaces=Supervisable,Daemon,Manager
-unit_interfaces=Starter,Stopper,StartStopper,Reloader,Subber
+MOCK_PKGS=mock_unit mock_systemctl
+#system_interfaces=Supervisable,Dependency,Reloader
+unit_interfaces=Interface,Reloader
+systemctl_interfaces=Daemon
 
 all: build test
 
@@ -52,13 +53,14 @@ depend:
 	@go get -v -d $(REPO)/...
 
 dependtest: dependmock
+	@go get -v github.com/stretchr/testify
 
 dependmock:
 	@echo "Checking mock testing dependencies..."
 	@go get -v github.com/golang/mock/gomock
 	@go get -v github.com/golang/mock/mockgen
 
-dependcover:
+dependcover: dependtest
 	@echo "Checking coverage testing dependencies..."
 	@go get -v golang.org/x/tools/cmd/cover
 	@go get -v github.com/wadey/gocovmerge
@@ -66,7 +68,6 @@ dependcover:
 dependcoverall: dependcover
 	@echo "Checking coveralls.io testing dependencies..."
 	@go get -v github.com/mattn/goveralls
-
 
 vet: generate
 	@echo "Running 'go vet'..."
@@ -78,9 +79,9 @@ generate: depend
 
 $(MOCK_PKGS) test cover build: generate
 
-$(INIT) $(SYSTEMCTL): % : $(wildcard %/*.go)
+init systemctl: % : $(wildcard cmd/%/*.go)
 	@echo "Building $@..."
-	@go build -o $(ABS_BINDIR)/$@ $(REPO)/$@
+	@go build -o $(ABS_BINDIR)/$@ $(REPO)/cmd/$@
 	@echo "$@ built and saved to $(ABS_BINDIR)/$@"
 
 install: build
@@ -95,6 +96,7 @@ $(MOCK_PKGS): mock_%: $(wildcard %/interfaces.go)
 	@mkdir -p $(ABS_TEST)/$@
 	@mockgen -destination=$(ABS_TEST)/$@/$@.go -package=$@ $(REPO)/$* $($*_interfaces)
 	@echo "$@ package built and saved to $(ABS_TEST)/$@"
+	@go get $(PKG_TEST)/$@
 
 test: dependtest mock 
 	@echo "Starting tests..."
@@ -109,7 +111,7 @@ coveralls: dependcoverall
 	@$(ABS_COVER) --coveralls
 
 
-travis: dependcoverall build
+travis: dependcoverall build mock
 	@echo "Starting travis build..."
 	@$(ABS_COVER) --coveralls $(TRAVIS_MODE)
 
@@ -129,4 +131,4 @@ cleanmock:
 	@echo "Removing mock units..."
 	@-rm -rf `find $(ABS_REPO) -name 'mock_*'`
 
-.PHONY: all generate test dependtest depend cover dependcover systemctl init install clean cleanbin cleanstringers cleancover cleanmock build travis mock_system mock_unit vet init $(SYSTEMCTL)
+.PHONY: all generate test dependtest depend cover dependcover systemctl init install clean cleanbin cleanstringers cleancover cleanmock build travis mock_system mock_unit vet init cmd/init cmd/systemctl $(SYSTEMCTL)

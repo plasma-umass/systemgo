@@ -1,11 +1,12 @@
-package unit
+package unit_test
 
 import (
 	"errors"
 	"fmt"
 	"testing"
 
-	"github.com/b1101/systemgo/test"
+	"github.com/b1101/systemgo/unit"
+	"github.com/stretchr/testify/assert"
 )
 
 var ErrTest = errors.New("test")
@@ -13,17 +14,25 @@ var source = "test"
 var expected = fmt.Sprintf("%s: %s", source, ErrTest)
 
 func TestParseErr(t *testing.T) {
-	pe := ParseErr(source, ErrTest)
+	pe := unit.ParseErr(source, ErrTest)
 
-	if pe.Source != "test" {
-		t.Errorf(test.MismatchIn, "pe.Source", pe.Source, source)
+	assert.Equal(t, pe.Source, "test", "pe.Source")
+	assert.Equal(t, pe.Err, ErrTest, "pe.Err")
+	assert.EqualError(t, pe, expected)
+}
+
+var errCount = 5
+
+func TestMultiErr(t *testing.T) {
+	me := unit.MultiError{}
+
+	for i := 0; i < errCount; i++ {
+		me = append(me, ErrTest)
 	}
 
-	if pe.Err != ErrTest {
-		t.Errorf(test.MismatchIn, "pe.Err", pe.Err, ErrTest)
-	}
+	assert.Len(t, me, errCount)
 
-	if pe.Error() != expected {
-		t.Errorf(test.MismatchIn, "pe.Error()", pe.Error(), expected)
+	for i, msg := range me.Errors() {
+		assert.EqualError(t, me[i], msg)
 	}
 }

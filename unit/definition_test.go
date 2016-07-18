@@ -1,4 +1,4 @@
-package unit
+package unit_test
 
 import (
 	"io"
@@ -6,7 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/b1101/systemgo/test"
+	"github.com/b1101/systemgo/unit"
+	"github.com/stretchr/testify/assert"
 )
 
 var DEFAULT_INTS = []int{1, 2, 3}
@@ -26,22 +27,22 @@ After=After
 WantedBy=WantedBy
 RequiredBy=RequiredBy`
 
-func TestDefinition(t *testing.T) {
+func TestParseDefinition(t *testing.T) {
 	cases := []struct {
 		def      interface{}
 		correct  bool
 		contents io.Reader
 	}{
-		{&definition{}, true,
+		{&unit.Definition{}, true,
 			strings.NewReader(DEFAULT_UNIT),
 		},
-		{&definition{}, false,
+		{&unit.Definition{}, false,
 			strings.NewReader(DEFAULT_UNIT + `
 Wrong=Field
 Test=should fail`),
 		},
 		{&struct {
-			definition
+			unit.Definition
 			Test struct {
 				Ints []int
 				Bool bool
@@ -53,7 +54,7 @@ Ints=1 2 3
 Bool=yes`),
 		},
 		{&struct {
-			definition
+			unit.Definition
 			Test struct {
 				Ints []int
 				Bool bool
@@ -65,7 +66,7 @@ Ints=1 2 3
 Bool=foo`),
 		},
 		{&struct {
-			definition
+			unit.Definition
 			Test struct {
 				Ints []int
 				Bool bool
@@ -79,13 +80,13 @@ Bool=foo`),
 	}
 
 	for _, c := range cases {
-		if err := parseDefinition(c.contents, c.def); err != nil {
-			if c.correct {
-				t.Errorf(test.ErrorIn, "parseDefinition", err)
-			}
+		err := unit.ParseDefinition(c.contents, c.def)
+		if !c.correct {
+			assert.Error(t, err, "ParseDefinition")
 			continue
-		} else if !c.correct && err == nil {
-			t.Errorf(test.Nil, "err")
+		}
+		if !assert.NoError(t, err, "ParseDefinition") {
+			continue
 		}
 
 		defVal := reflect.ValueOf(c.def).Elem()
@@ -105,41 +106,34 @@ Bool=foo`),
 
 				switch option.Kind() {
 				case reflect.String:
-					if option.String() != option.Name {
-						t.Errorf(test.MismatchIn, option.Name, option, option.Name)
-					}
-					if m := methodByName(defVal, option.Name).(func() string); m() != option.Name {
-						t.Errorf(test.MismatchIn, option.Name+"()", m(), option.Name)
-					}
+					assert.Equal(t, option.String(), option.Name, "string")
+
+					m := methodByName(defVal, option.Name).(func() string)
+					assert.Equal(t, m(), option.Name, "string getter")
+
 				case reflect.Bool:
-					if option.Bool() != DEFAULT_BOOL {
-						t.Errorf(test.MismatchInVal, option.Name, option.Bool(), DEFAULT_BOOL)
-					}
+					assert.Equal(t, option.Bool(), DEFAULT_BOOL, "bool")
+
 					// Workaround for the non-existent bool getter
 					if defVal.MethodByName(option.Name).IsValid() {
-						if m := methodByName(defVal, option.Name).(func() bool); m() != DEFAULT_BOOL {
-							t.Errorf(test.MismatchInVal, option.Name+"()", m(), DEFAULT_BOOL)
-						}
+						m := methodByName(defVal, option.Name).(func() bool)
+						assert.Equal(t, m(), DEFAULT_BOOL, "bool getter")
 					}
 				case reflect.Slice:
 					if slice, ok := interfaceOf(option.Value).([]string); ok {
 						expect := []string{option.Name}
+						assert.Equal(t, slice, expect, "[]string")
 
-						if !reflect.DeepEqual(slice, expect) {
-							t.Errorf(test.MismatchIn, option.Name, slice, expect)
-						}
-						if m := methodByName(defVal, option.Name).(func() []string); !reflect.DeepEqual(m(), expect) {
-							t.Errorf(test.MismatchIn, option.Name+"()", m(), expect)
-						}
+						m := methodByName(defVal, option.Name).(func() []string)
+						assert.Equal(t, m(), expect, "[]string getter")
+
 					} else if slice, ok := interfaceOf(option.Value).([]int); ok {
-						if !reflect.DeepEqual(slice, DEFAULT_INTS) {
-							t.Errorf(test.MismatchInVal, option.Name, slice, DEFAULT_INTS)
-						}
+						assert.Equal(t, slice, DEFAULT_INTS, "[]int")
+
 						// Workaround for the non-existent []int getter
 						if defVal.MethodByName(option.Name).IsValid() {
-							if m := methodByName(defVal, option.Name).(func() []string); !reflect.DeepEqual(m(), DEFAULT_INTS) {
-								t.Errorf(test.MismatchInVal, option.Name+"()", m(), DEFAULT_INTS)
-							}
+							m := methodByName(defVal, option.Name).(func() []string)
+							assert.Equal(t, m(), DEFAULT_INTS, "[]int getter")
 						}
 					}
 				}

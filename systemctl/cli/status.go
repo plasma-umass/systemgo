@@ -18,37 +18,57 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cmd
+package cli
 
 import (
+	"fmt"
 	"log"
 
+	"github.com/b1101/systemgo/system"
+	"github.com/b1101/systemgo/unit"
 	"github.com/spf13/cobra"
 )
 
-// stopCmd represents the stop command
-var stopCmd = &cobra.Command{
-	Use:   "stop",
-	Short: "Stop (deactivate) one or more units",
+// statusCmd represents the status command
+var statusCmd = &cobra.Command{
+	Use:   "status",
+	Short: "Show runtime status of one or more units",
 	Long:  `TODO: add description`,
 	Run: func(cmd *cobra.Command, args []string) {
-		if err := sys.Do("stop", args...); err != nil {
+		yield, err := sys.Get("status", args...)
+		if err != nil {
 			log.Fatalln(err.Error())
+		}
+
+		if len(args) == 0 {
+			var v system.Status
+
+			yield.Decode(&v)
+			fmt.Println(v)
+
+			return
+		}
+
+		var v unit.Status
+
+		for yield.More() {
+			yield.Decode(&v)
+			fmt.Println(v)
 		}
 	},
 }
 
 func init() {
-	RootCmd.AddCommand(stopCmd)
+	RootCmd.AddCommand(statusCmd)
 
 	// Here you will define your flags and configuration settings.
 
 	// Cobra supports Persistent Flags which will work for this command
 	// and all subcommands, e.g.:
-	// stopCmd.PersistentFlags().String("foo", "", "A help for foo")
+	// statusCmd.PersistentFlags().String("foo", "", "A help for foo")
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
-	// stopCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	// statusCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 
 }

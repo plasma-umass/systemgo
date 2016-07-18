@@ -1,23 +1,24 @@
-package unit
+package unit_test
 
 import (
 	"fmt"
 	"testing"
 
-	"github.com/b1101/systemgo/test"
+	"github.com/b1101/systemgo/unit"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestStatus(t *testing.T) {
 
-	st := Status{
-		Load: LoadStatus{
+	st := unit.Status{
+		Load: unit.LoadStatus{
 			Path:   "Path",
-			Loaded: Loaded,
-			State:  Enabled,
-			Vendor: Enabled,
+			Loaded: unit.Loaded,
+			State:  unit.Enabled,
+			Vendor: unit.Enabled,
 		},
-		Activation: ActivationStatus{
-			State: Active,
+		Activation: unit.ActivationStatus{
+			State: unit.Active,
 			Sub:   "Sub",
 		},
 		Log: []byte(`123456 test
@@ -34,7 +35,5 @@ Log:
 		st.Log,
 	)
 
-	if st.String() != expected {
-		t.Errorf(test.Mismatch, st, expected)
-	}
+	assert.Equal(t, st.String(), expected)
 }

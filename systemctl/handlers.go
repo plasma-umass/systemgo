@@ -4,7 +4,7 @@ import "github.com/b1101/systemgo/system"
 
 type Handler func(...string) []Response
 
-func Handlers(sys system.Daemon) map[string]Handler {
+func Handlers(sys Daemon) map[string]Handler {
 	return map[string]Handler{
 		"status": func(names ...string) (resp []Response) {
 			if len(names) == 0 {

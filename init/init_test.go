@@ -1,4 +1,4 @@
-package init
+package init_test
 
 import (
 	"fmt"
@@ -9,11 +9,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/b1101/systemgo/system"
-	"github.com/b1101/systemgo/test"
+	. "github.com/b1101/systemgo/init"
+	"github.com/b1101/systemgo/unit"
+	"github.com/stretchr/testify/assert"
 )
 
-var units = map[string][]struct {
+var cases = map[string][]struct {
 	name     string
 	contents []byte
 }{
@@ -24,7 +25,7 @@ var units = map[string][]struct {
 			Description=a.service
 			After=b.service
 			[Service]
-			ExecStart=/bin/sleep 2`),
+			ExecStart=/bin/sleep 60`),
 		},
 		{
 			"b.service",
@@ -32,7 +33,7 @@ var units = map[string][]struct {
 			Description=b.service
 			[Service]
 			Type=oneshot
-			ExecStart=/bin/sleep 2`),
+			ExecStart=/bin/echo test`),
 		},
 		{
 			"default.target",
@@ -50,13 +51,13 @@ var units = map[string][]struct {
 			[]byte(`[Unit]
 			Description=d.service
 			[Service]
-			ExecStart=/bin/sleep 2`),
+			ExecStart=/bin/sleep 60`),
 		},
 	},
 }
 
 func populate(path string) (err error) {
-	for dir, units := range units {
+	for dir, units := range cases {
 		dirpath := filepath.Join(path, dir)
 		if err := os.MkdirAll(dirpath, 0755); err != nil {
 			return fmt.Errorf("os.MkdirAll(%s, 0755): %s", dirpath, err)
@@ -81,25 +82,37 @@ func populate(path string) (err error) {
 var etc, lib, dirpath string
 
 func init() {
-	system.Debug = true
-
 	var err error
 	if dirpath, err = ioutil.TempDir("", "init-test"); err != nil {
-		log.Fatalf(test.ErrorIn, "ioutil.Tempdir", err)
+		log.Fatalf("ioutil.Tempdir: %s", err)
 	}
 
 	etc = filepath.Join(dirpath, "etc", "systemd", "system")
 	lib = filepath.Join(dirpath, "lib", "systemd", "system")
-	conf.Paths = []string{etc, lib}
+	Conf.Paths = []string{etc, lib}
 
 	if err = populate(dirpath); err != nil {
 		os.RemoveAll(dirpath)
-		log.Fatalf(test.ErrorIn, "populate", err)
+		log.Fatalf("populate: %s", err)
 	}
 }
 
+// TODO: Proper testing
 func TestBoot(t *testing.T) {
 	defer os.RemoveAll(dirpath)
 	Boot()
-	time.Sleep(5 * time.Second)
+	time.Sleep(time.Second)
+	for _, units := range cases {
+		for _, c := range units {
+			u, err := System.Get(c.name)
+
+			if !assert.NoError(t, err, c.name) {
+				continue
+			}
+
+			u.Wait()
+			fmt.Println(u.Status())
+			assert.Equal(t, u.Active(), unit.Active, fmt.Sprintf("%s - %s", c.name, u.Active()))
+		}
+	}
 }

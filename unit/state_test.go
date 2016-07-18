@@ -1,21 +1,22 @@
-package unit
+package unit_test
 
 import (
 	"fmt"
 	"testing"
 
-	"github.com/b1101/systemgo/test"
+	"github.com/b1101/systemgo/unit"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestStates(t *testing.T) {
-	var activation Activation
-	var load Load
-	var enable Enable
+	var activation unit.Activation
+	var load unit.Load
+	var enable unit.Enable
 
 	states := map[fmt.Stringer]string{
-		Loaded: "Loaded",
-		Active: "Active",
-		Static: "Static",
+		unit.Loaded: "Loaded",
+		unit.Active: "Active",
+		unit.Static: "Static",
 
 		activation: "Inactive",
 		load:       "Stub",
@@ -23,8 +24,6 @@ func TestStates(t *testing.T) {
 	}
 
 	for state, out := range states {
-		if state.String() != out {
-			t.Errorf(test.Mismatch, state, out)
-		}
+		assert.Equal(t, state.String(), out)
 	}
 }
