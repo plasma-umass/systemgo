@@ -17,6 +17,7 @@ import (
 )
 
 var ErrDepConflict = fmt.Errorf("Error stopping conflicting unit")
+var ErrNotActive = fmt.Errorf("Unit is not active")
 
 var DEFAULT_PATHS = []string{"/etc/systemd/system/", "/run/systemd/system", "/lib/systemd/system"}
 
@@ -43,6 +44,69 @@ type Daemon struct {
 	Log *Log
 
 	Jobs Jobs
+}
+
+func New() (sys *Daemon) {
+	defer func() {
+		go sys.doJobs()
+
+		if debug {
+			sys.Log.Logger.Hooks.Add(&errorHook{
+				Source: "system",
+			})
+		}
+	}()
+	return &Daemon{
+		active: make(map[*Unit]bool),
+		loaded: make(map[*Unit]bool),
+		units:  make(map[string]*Unit),
+
+		Since: time.Now(),
+		Log:   NewLog(),
+		Paths: DEFAULT_PATHS,
+
+		Jobs: Jobs{
+			units:    make(chan *Unit),
+			assigned: map[*Unit]Job{},
+		},
+	}
+}
+
+func (sys *Daemon) SetPaths(paths ...string) {
+	sys.Paths = paths
+}
+
+// Status returns status of the system
+// If error is returned it is going to be an error,
+// returned by the call to ioutil.ReadAll(sys.Log)
+func (sys *Daemon) Status() (st Status, err error) {
+	st = Status{
+		State: sys.State,
+		Since: sys.Since,
+	}
+
+	st.Log, err = ioutil.ReadAll(sys.Log)
+
+	return
+}
+
+var supported = map[string]bool{
+	".service": true,
+	".target":  true,
+	".mount":   false,
+	".socket":  false,
+}
+
+// SupportedSuffix returns a bool indicating if suffix represents a unit type,
+// which is supported by Systemgo
+func SupportedSuffix(suffix string) bool {
+	return supported[suffix]
+}
+
+// Supported returns a bool indicating if filename represents a unit type,
+// which is supported by Systemgo
+func Supported(filename string) bool {
+	return SupportedSuffix(filepath.Ext(filename))
 }
 
 type Jobs struct {
@@ -128,78 +192,6 @@ func (sys *Daemon) do(u *Unit, j job) (err error) {
 	default:
 		panic("Unknown job type")
 	}
-}
-
-type job int
-
-const (
-	start job = iota
-	stop
-	restart
-)
-
-var supported = map[string]bool{
-	".service": true,
-	".target":  true,
-	".mount":   false,
-	".socket":  false,
-}
-
-// SupportedSuffix returns a bool indicating if suffix represents a unit type,
-// which is supported by Systemgo
-func SupportedSuffix(suffix string) bool {
-	return supported[suffix]
-}
-
-// Supported returns a bool indicating if filename represents a unit type,
-// which is supported by Systemgo
-func Supported(filename string) bool {
-	return SupportedSuffix(filepath.Ext(filename))
-}
-
-func New() (sys *Daemon) {
-	defer func() {
-		go sys.doJobs()
-
-		if debug {
-			sys.Log.Logger.Hooks.Add(&errorHook{
-				Source: "system",
-			})
-		}
-	}()
-	return &Daemon{
-		active: make(map[string]*Unit),
-		loaded: make(map[string]*Unit),
-		parsed: make(map[string]*Unit),
-		names:  make(map[*Unit]string),
-
-		Since: time.Now(),
-		Log:   NewLog(),
-		Paths: DEFAULT_PATHS,
-
-		Jobs: Jobs{
-			units:    make(chan *Unit),
-			assigned: map[*Unit]job{},
-		},
-	}
-}
-
-func (sys *Daemon) SetPaths(paths ...string) {
-	sys.Paths = paths
-}
-
-// Status returns status of the system
-// If error is returned it is going to be an error,
-// returned by the call to ioutil.ReadAll(sys.Log)
-func (sys *Daemon) Status() (st Status, err error) {
-	st = Status{
-		State: sys.State,
-		Since: sys.Since,
-	}
-
-	st.Log, err = ioutil.ReadAll(sys.Log)
-
-	return
 }
 
 func (sys *Daemon) Start(names ...string) (err error) {
