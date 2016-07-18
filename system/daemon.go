@@ -229,12 +229,15 @@ func (sys *Daemon) Start(names ...string) (err error) {
 		for _, name := range u.Conflicts() {
 			log.Debugf("%p conflicts with %s", u, name)
 			wg.Add(1)
-			go func() {
-				if err = sys.Stop(name); err != nil && err != ErrNotFound {
+			go func(name string) {
+				if u, err = sys.Get(name); err != nil {
+					return
+				}
+				if err = sys.Stop(u); err != nil {
 					u.Log.Printf("Error stopping %s: %s", name, err)
 				}
 				wg.Done()
-			}()
+			}(name)
 
 		}
 		wg.Wait()
@@ -248,8 +251,8 @@ func (sys *Daemon) Start(names ...string) (err error) {
 	return
 }
 
-func (sys *Daemon) Stop(name string) (err error) {
-	log.Debugf("sys.Stop name: %s", name)
+func (sys *Daemon) Stop(u *Unit) (err error) {
+	log.Debugf("sys.Stop name: %s", u.name)
 
 	if !sys.active[u] {
 		return ErrNotActive
@@ -258,25 +261,20 @@ func (sys *Daemon) Stop(name string) (err error) {
 	return
 }
 
-func (sys *Daemon) Restart(name string) (err error) {
-	if u, ok := sys.active[name]; ok {
-		sys.Jobs.Assign(u, restart)
+func (sys *Daemon) Restart(u *Unit) (err error) {
+	if !sys.active[u] {
+		return ErrNotActive
 	}
 	sys.Jobs.Assign(u, restart)
 	return
 }
 
-func (sys *Daemon) Reload(name string) (err error) {
-	var u *Unit
-	if u, err = sys.Get(name); err != nil {
-		return
-	}
-
-	if reloader, ok := u.Interface.(unit.Reloader); ok {
+func (sys *Daemon) Reload(u *Unit) (err error) {
+	if reloader, ok := u.Interface.(unit.Reloader); !ok {
+		return ErrNoReload
+	} else {
 		return reloader.Reload()
 	}
-
-	return ErrNoReload
 }
 
 // TODO
