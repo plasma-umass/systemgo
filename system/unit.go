@@ -30,10 +30,10 @@ type Unit struct {
 	loading chan struct{}
 }
 
-//type activeWaiter interface {
-//IsActive() bool
-//Wait()
-//}
+type ActiveWaiter interface {
+	IsActive() bool
+	Wait()
+}
 
 func NewUnit(v unit.Interface) (u *Unit) {
 	if debug {
