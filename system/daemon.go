@@ -22,16 +22,13 @@ var DEFAULT_PATHS = []string{"/etc/systemd/system/", "/run/systemd/system", "/li
 
 type Daemon struct {
 	// Map containing pointers to all currently active units(name -> *Unit)
-	active map[string]*Unit
+	active map[*Unit]bool
 
 	// Map containing pointers to all successfully loaded units(name -> *Unit)
-	loaded map[string]*Unit
+	loaded map[*Unit]bool
 
-	// Map containing pointers to all parsed units, including those failed to load(name -> *Unit)
-	parsed map[string]*Unit
-
-	// Map containing name of each unit (*Unit -> name)
-	names map[*Unit]string
+	// Map of created units (name -> *Unit)
+	units map[string]*Unit
 
 	// Paths, where the unit file specifications get searched for
 	Paths []string
@@ -238,9 +235,6 @@ func (sys *Daemon) Start(names ...string) (err error) {
 			return ErrDepConflict
 		}
 
-		sys.active[sys.nameOf(u)] = u
-
-		log.Debugf("%p put into sys.active hashmap under name %s", u, sys.nameOf(u))
 		sys.Jobs.Assign(u, start)
 	}
 
@@ -250,8 +244,8 @@ func (sys *Daemon) Start(names ...string) (err error) {
 func (sys *Daemon) Stop(name string) (err error) {
 	log.Debugf("sys.Stop name: %s", name)
 
-	if u, ok := sys.active[name]; ok {
-		sys.Jobs.Assign(u, stop)
+	if !sys.active[u] {
+		return ErrNotActive
 	}
 	return
 }
@@ -323,7 +317,7 @@ var std = New()
 // If error is returned, it will be error from sys.Load(name)
 func (sys *Daemon) Get(name string) (u *Unit, err error) {
 	var ok bool
-	if u, ok = sys.loaded[name]; !ok {
+	if u, ok = sys.units[name]; !ok {
 		u, err = sys.Load(name)
 	}
 	return
@@ -382,7 +376,7 @@ func (sys *Daemon) Load(name string) (u *Unit, err error) {
 		defer file.Close()
 
 		var parsed bool
-		if u, parsed = sys.parsed[name]; !parsed {
+		if u, parsed = sys.units[name]; !parsed {
 			var v unit.Interface
 			switch filepath.Ext(path) {
 			case ".target":
@@ -392,24 +386,19 @@ func (sys *Daemon) Load(name string) (u *Unit, err error) {
 			case ".service":
 				v = &service.Unit{}
 			default:
-				log.Fatalln("Trying to load an unsupported unit type")
+				panic("Trying to load an unsupported unit type")
 			}
 
 			u = NewUnit(v)
+			u.name = name
+			log.WithFields(log.Fields{
+				"unit": name,
+			}).Debugf("Created new *Unit")
 
-			sys.names[u] = name
-			sys.parsed[name] = u
-
-			sys.Log.Debugf("Created a *Unit wrapping %s and put into internal hashmap")
+			sys.units[name] = u
 
 			if name != path {
-				sys.parsed[path] = u
-			}
-
-			if debug {
-				u.Log.Logger.Hooks.Add(&errorHook{
-					Source: name,
-				})
+				sys.units[path] = u
 			}
 		}
 
@@ -438,8 +427,8 @@ func (sys *Daemon) Load(name string) (u *Unit, err error) {
 		}
 
 		u.loaded = unit.Loaded
-		sys.loaded[name] = u
-		sys.Log.Debugf("Unit %s loaded and put into internal hashmap", name)
+		sys.loaded[u] = true
+
 		return u, err
 	}
 
@@ -620,11 +609,4 @@ func (g *graph) traverse(u *Unit) (err error) {
 	}
 
 	return nil
-}
-
-func (sys *Daemon) nameOf(u *Unit) (name string) {
-	if name, ok := sys.names[u]; ok {
-		return name
-	}
-	panic("Unnamed unit")
 }

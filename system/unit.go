@@ -51,6 +51,9 @@ func NewUnit(v unit.Interface) (u *Unit) {
 func (u *Unit) Path() string {
 	return u.path
 }
+func (u *Unit) Name() string {
+	return u.name
+}
 func (u *Unit) Loaded() unit.Load {
 	return u.loaded
 }

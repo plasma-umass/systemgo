@@ -35,8 +35,8 @@ func TestGet(t *testing.T) {
 
 	u := NewUnit(uInt)
 
-	sys.parsed[name] = u
-	sys.parsed[fpath] = u
+	sys.units[name] = u
+	//sys.parsed[fpath] = u
 
 	for _, name := range []string{name, fpath} {
 		ptr, err := sys.Get(name)
@@ -111,22 +111,15 @@ func TestStart(t *testing.T) {
 
 		for name, m := range *mocks {
 			u := NewUnit(m)
-			sys.loaded[name] = u
-			sys.names[u] = name
+			u.name = name
+			sys.units[name] = u
 		}
-
-		fmt.Println("----- Units -----")
-		fmt.Println("pointer\t\tname")
-		for name, u := range sys.loaded {
-			fmt.Printf("%p\t%s\n", u, name)
-		}
-		fmt.Println("-----------------")
 
 		sequence(*mocks, seq)
 
 		assert.NoError(t, sys.Start(seq[0]), "sys.Start("+seq[0]+")")
 
-		time.Sleep(time.Second)
+		time.Sleep(5 * time.Second)
 	}
 }
 
