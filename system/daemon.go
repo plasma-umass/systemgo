@@ -112,12 +112,21 @@ func Supported(filename string) bool {
 type Jobs struct {
 	sync.Mutex
 
-	assigned map[*Unit]job
+	assigned map[*Unit]Job
 
 	failed map[*Unit]bool
 
 	units chan *Unit
 }
+
+type Job int
+
+//go:generate stringer -type=Job
+const (
+	start Job = iota
+	stop
+	restart
+)
 
 func (jobs *Jobs) Len() (n int) {
 	return len(jobs.assigned)
@@ -127,14 +136,15 @@ func (jobs *Jobs) Failed() (n int) {
 	return len(jobs.failed)
 }
 
-func (jobs *Jobs) Assign(u *Unit, j job) {
+func (jobs *Jobs) Assign(u *Unit, job Job) {
 	jobs.Lock()
+	log.Debugln("j.Assign locked")
 	defer jobs.Unlock()
 
 	assigned, has := jobs.assigned[u]
 	if !has {
-		log.Debugf("Assigned a new job(%v) for %p", j, u)
-		jobs.assigned[u] = j
+		log.Debugf("Assigned a new job(%v) for %p", job, u)
+		jobs.assigned[u] = job
 		jobs.units <- u
 		return
 	}
@@ -142,46 +152,51 @@ func (jobs *Jobs) Assign(u *Unit, j job) {
 	log.Debugf("A job for %p has already been assigned", u)
 
 	switch {
-	case assigned == stop && j == start:
+	case assigned == stop && job == start:
 		jobs.assigned[u] = restart
 
-	case assigned == start && j == stop:
+	case assigned == start && job == stop:
 		delete(jobs.assigned, u)
 
 	default:
-		jobs.assigned[u] = j
+		jobs.assigned[u] = job
 	}
 }
 
 func (sys *Daemon) doJobs() {
 	for u := range sys.Jobs.units {
-		log.Debugf("sys.work() unit: %p", u)
+		log.WithFields(log.Fields{
+			"func": "doJob", "unit": u.name,
+		}).Debugln("dispatching job in new goroutine")
 
 		go func(u *Unit) {
 			sys.Jobs.Lock()
-			defer sys.Jobs.Unlock()
-
+			log.Debugf("doJobs locked")
 			if j, has := sys.Jobs.assigned[u]; has {
 				if err := sys.do(u, j); err != nil {
 					log.Debugf("Job for %p failed to execute: %s", u, err)
+					log.WithField("unit", u.name)
 					sys.Jobs.failed[u] = true
 				}
 				delete(sys.Jobs.assigned, u)
 			}
+			sys.Jobs.Unlock()
+			log.Debugf("doJobs unlocked")
 		}(u)
 	}
 }
 
-func (sys *Daemon) do(u *Unit, j job) (err error) {
-	switch j {
+func (sys *Daemon) do(u *Unit, job Job) (err error) {
+	switch job {
 	case start:
 		if err = u.Start(); err == nil {
-			sys.active[sys.nameOf(u)] = u
+			log.Debugf("%p put into sys.active hashmap under name %s", u, u.name)
+			sys.active[u] = true
 		}
 		return
 	case stop:
 		if err = u.Stop(); err == nil {
-			delete(sys.active, sys.nameOf(u))
+			delete(sys.active, u)
 		}
 		return
 	case restart:
@@ -239,6 +254,7 @@ func (sys *Daemon) Stop(name string) (err error) {
 	if !sys.active[u] {
 		return ErrNotActive
 	}
+	sys.Jobs.Assign(u, stop)
 	return
 }
 
@@ -246,6 +262,7 @@ func (sys *Daemon) Restart(name string) (err error) {
 	if u, ok := sys.active[name]; ok {
 		sys.Jobs.Assign(u, restart)
 	}
+	sys.Jobs.Assign(u, restart)
 	return
 }
 
