@@ -176,6 +176,7 @@ func (sys *Daemon) Supervise(name string, uInt unit.Interface) (u *Unit, err err
 	}
 	u = NewUnit(uInt)
 	u.name = name
+	u.system = sys
 
 	sys.units[name] = u
 

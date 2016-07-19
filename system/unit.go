@@ -20,7 +20,8 @@ type Unit struct {
 
 	Log *Log
 
-	path   string
+	path string
+
 	loaded unit.Load
 
 	// Interfaces are too expensive to use?
@@ -28,11 +29,8 @@ type Unit struct {
 	requires map[string]*Unit
 
 	loading chan struct{}
-}
 
-type ActiveWaiter interface {
-	IsActive() bool
-	Wait()
+	system *Daemon
 }
 
 func NewUnit(v unit.Interface) (u *Unit) {
@@ -44,7 +42,7 @@ func NewUnit(v unit.Interface) (u *Unit) {
 	return &Unit{
 		Interface: v,
 		Log:       NewLog(),
-		requires:  map[string]*Unit{},
+		//requires:  map[string]*Unit{},
 	}
 }
 
@@ -144,7 +142,13 @@ func (u *Unit) Start() (err error) {
 	}()
 
 	wg := &sync.WaitGroup{}
-	for name, dep := range u.requires {
+	//for name, dep := range u.requires {
+	for _, name := range u.Requires() {
+		var dep *Unit
+		if dep, err = u.system.Get(name); err != nil {
+			u.Log.Printf("Failed to load dependency %s: %s", name, err)
+			return ErrDepFail
+		}
 		wg.Add(1)
 		go func(name string, dep *Unit) {
 			defer wg.Done()
@@ -164,10 +168,17 @@ func (u *Unit) Start() (err error) {
 		return
 	}
 
+	u.system.active[u] = true
 	return u.Interface.Start()
 }
 func (u *Unit) Stop() (err error) {
-	if u.Interface == nil {
+	defer func() {
+		if err == nil {
+			u.system.active[u] = false
+		}
+	}()
+
+	if u.Interface == nil || !u.system.loaded[u] {
 		return ErrNotLoaded
 	}
 
