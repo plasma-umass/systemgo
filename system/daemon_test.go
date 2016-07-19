@@ -30,18 +30,18 @@ func TestGet(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	uInt := mock_unit.NewMockInterface(ctrl)
-	uInt.EXPECT().Define(gomock.Any()).Return(nil).Times(2)
+	m := mock_unit.NewMockInterface(ctrl)
+	m.EXPECT().Define(gomock.Any()).Return(nil).Times(1)
 
-	u := NewUnit(uInt)
+	u, err := sys.Supervise(name, m)
+	require.NoError(t, err)
 
-	sys.units[name] = u
-	//sys.parsed[fpath] = u
+	sys.units[fpath] = u
 
 	for _, name := range []string{name, fpath} {
 		ptr, err := sys.Get(name)
-		require.NoError(t, err, "sys.Get")
-		assert.Equal(t, u, ptr, "*Unit")
+		require.NoError(t, err, name)
+		assert.Equal(t, u, ptr, name)
 	}
 }
 
@@ -102,7 +102,7 @@ func TestStart(t *testing.T) {
 
 	empty(abc["a"], "wants", "before", "conflicts")
 	empty(abc["b"], "wants", "before", "conflicts")
-	empty(abc["c"], "wants", "after", "before", "conflicts", "requires")
+	empty(abc["c"], "wants", "before", "conflicts", "after", "requires")
 
 	for mocks, seq := range map[*map[string]*mock_unit.MockInterface][]string{
 		&abc: {"a", "b", "c"},
@@ -110,17 +110,37 @@ func TestStart(t *testing.T) {
 		sys := New()
 
 		for name, m := range *mocks {
-			u := NewUnit(m)
-			u.name = name
-			sys.units[name] = u
+			u, err := sys.Supervise(name, m)
+			require.NoError(t, err)
+
+			sys.loaded[u] = true
 		}
 
 		sequence(*mocks, seq)
 
-		assert.NoError(t, sys.Start(seq[0]), "sys.Start("+seq[0]+")")
+		u, err := sys.Get(seq[0])
+		require.NoError(t, err, "sys.Get")
+		assert.NoError(t, sys.Start(u), "sys.Start("+seq[0]+")")
 
-		time.Sleep(5 * time.Second)
+		time.Sleep(time.Second)
 	}
+}
+
+func TestStop(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	m := mock_unit.NewMockInterface(ctrl)
+	m.EXPECT().Stop().Return(nil).Times(1)
+
+	sys := New()
+
+	u, err := sys.Supervise("TestStop", m)
+	require.NoError(t, err)
+
+	assert.Error(t, sys.Stop(u))
+	sys.active[u] = true
+	assert.NoError(t, sys.Stop(u))
 }
 
 func sequence(units map[string]*mock_unit.MockInterface, names []string) *gomock.Call {
