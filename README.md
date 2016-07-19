@@ -11,10 +11,9 @@ An init system in Go, intended to run on [Browsix](https://github.com/plasma-uma
 * [Systemd](https://github.com/Systemd/Systemd)-compatible
 
 # Milestones
-- [ ] `init` can boot an OS (_approx 05.06.2016_)
-- [ ] `systemctl` can be used to `start` or `stop` units(_approx 10.06.2016_)
-- [ ] _Systemgo_ functionality fully supported by [Browsix](https://github.com/plasma-umass/browsix)(_approx 15.06.2016_)
-- [ ] A demo of a web service using _systemgo_ in the context of [Browsix](https://github.com/plasma-umass/browsix) is ready(_approx 20.06.2016_)
+- [x] `systemctl` can be used to `start` or `stop` units(_approx 10.07.2016_)
+- [ ] _Systemgo_ functionality fully supported by [Browsix](https://github.com/plasma-umass/browsix)(_approx 20.07.2016_)
+- [ ] A demo of a web service using _systemgo_ in the context of [Browsix](https://github.com/plasma-umass/browsix) is ready(_approx 01.08.2016_)
 - [ ] `init` does not depend on HTTP for communication with `systemctl`
 
 # Progress
