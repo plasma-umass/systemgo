@@ -410,18 +410,18 @@ func pathset(path string) (definitions []string, err error) {
 type Jobs struct {
 	sync.Mutex
 
-	assigned map[*Unit]Job
+	assigned map[*Unit]job
 
 	failed map[*Unit]bool
 
 	units chan *Unit
 }
 
-type Job int
+type job int
 
 //go:generate stringer -type=Job
 const (
-	start Job = iota
+	start job = iota
 	stop
 	restart
 )
@@ -434,14 +434,14 @@ func (jobs *Jobs) Failed() (n int) {
 	return len(jobs.failed)
 }
 
-func (jobs *Jobs) Assign(u *Unit, job Job) {
+func (jobs *Jobs) Assign(u *Unit, j job) {
 	jobs.Lock()
 	log.WithField("func", "Assign").Debugf("locked")
 
 	assigned, has := jobs.assigned[u]
 	if !has {
-		log.Debugf("Assigned a new job(%s) for %s", job, u.name)
-		jobs.assigned[u] = job
+		log.Debugf("Assigned a new job(%s) for %s", j, u.name)
+		jobs.assigned[u] = j
 
 		jobs.Unlock()
 		log.WithField("func", "Assign").Debugf("unlocked")
@@ -453,15 +453,15 @@ func (jobs *Jobs) Assign(u *Unit, job Job) {
 	defer jobs.Unlock()
 
 	switch {
-	case assigned == stop && job == start:
+	case assigned == stop && j == start:
 		log.Debugf("A job for %s has already been assigned", u.name)
 		jobs.assigned[u] = restart
 
-	case assigned == start && job == stop:
+	case assigned == start && j == stop:
 		delete(jobs.assigned, u)
 
 	default:
-		jobs.assigned[u] = job
+		jobs.assigned[u] = j
 	}
 }
 
@@ -478,15 +478,15 @@ func (sys *Daemon) dispatchJobs() {
 	}
 }
 
-func (sys *Daemon) dispatch(u *Unit, job Job) (err error) {
+func (sys *Daemon) dispatch(u *Unit, j job) (err error) {
 	defer func() {
 		if err != nil {
 			log.WithField("unit", u.name).Debugf("Job failed to execute")
 			sys.Jobs.failed[u] = true
 		}
 	}()
-	log.WithField("unit", u.name).Debugf("Dispatching a new %s job", job)
-	switch job {
+	log.WithField("unit", u.name).Debugf("Dispatching a new %s job", j)
+	switch j {
 	case start:
 		if err = u.Start(); err == nil {
 			sys.active[u] = true
