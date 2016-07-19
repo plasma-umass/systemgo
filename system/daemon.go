@@ -33,13 +33,13 @@ type Daemon struct {
 	units map[string]*Unit
 
 	// Paths, where the unit file specifications get searched for
-	Paths []string
+	paths []string
 
 	// System state
-	State State
+	state State
 
 	// Starting time
-	Since time.Time
+	since time.Time
 
 	// System log
 	Log *Log
@@ -62,19 +62,27 @@ func New() (sys *Daemon) {
 		loaded: make(map[*Unit]bool),
 		units:  make(map[string]*Unit),
 
-		Since: time.Now(),
+		since: time.Now(),
 		Log:   NewLog(),
-		Paths: DEFAULT_PATHS,
+		paths: DEFAULT_PATHS,
 
 		Jobs: Jobs{
 			units:    make(chan *Unit),
-			assigned: map[*Unit]Job{},
+			assigned: map[*Unit]job{},
 		},
 	}
 }
 
+func (sys *Daemon) Paths() (paths []string) {
+	return sys.paths
+}
+
 func (sys *Daemon) SetPaths(paths ...string) {
-	sys.Paths = paths
+	sys.paths = paths
+}
+
+func (sys *Daemon) Since() (t time.Time) {
+	return sys.since
 }
 
 // Status returns status of the system
@@ -82,8 +90,8 @@ func (sys *Daemon) SetPaths(paths ...string) {
 // returned by the call to ioutil.ReadAll(sys.Log)
 func (sys *Daemon) Status() (st Status, err error) {
 	st = Status{
-		State: sys.State,
-		Since: sys.Since,
+		State: sys.state,
+		Since: sys.since,
 	}
 
 	st.Log, err = ioutil.ReadAll(sys.Log)
@@ -294,8 +302,8 @@ func (sys *Daemon) Load(name string) (u *Unit, err error) {
 	if filepath.IsAbs(name) {
 		paths = []string{name}
 	} else {
-		paths = make([]string, len(sys.Paths))
-		for i, path := range sys.Paths {
+		paths = make([]string, len(sys.paths))
+		for i, path := range sys.paths {
 			paths[i] = filepath.Join(path, name)
 		}
 	}
