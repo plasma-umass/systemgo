@@ -22,7 +22,7 @@ type Statuser interface {
 // Provides handlers for system control and is meant to be exposed
 // to the 'init' package, or anything else that could want to use it
 type Getter interface {
-	Get(string) (*Unit, error)
+	Get(string) (Supervisable, error)
 }
 type Loader interface {
 	Load(string) (*Unit, error)
