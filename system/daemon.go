@@ -171,11 +171,12 @@ func (sys *Daemon) StatusOf(name string) (st unit.Status, err error) {
 //}
 
 func (sys *Daemon) Supervise(name string, uInt unit.Interface) (u *Unit, err error) {
-	u = NewUnit(uInt)
-	u.name = name
 	if _, exists := sys.units[name]; exists {
 		return nil, ErrExists
 	}
+	u = NewUnit(uInt)
+	u.name = name
+
 	sys.units[name] = u
 
 	log.WithFields(log.Fields{
@@ -309,19 +310,7 @@ func (sys *Daemon) Load(name string) (u *Unit, err error) {
 		defer file.Close()
 
 		if !parsed {
-			var v unit.Interface
-			switch filepath.Ext(path) {
-			case ".target":
-				v = &target.Unit{Get: func(name string) (unit.Subber, error) {
-					return sys.Get(name)
-				}}
-			case ".service":
-				v = &service.Unit{}
-			default:
-				panic("Trying to load an unsupported unit type")
-			}
-
-			if u, err = sys.Supervise(name, v); err != nil {
+			if u, err = sys.parse(path); err != nil {
 				return
 			}
 
@@ -361,6 +350,22 @@ func (sys *Daemon) Load(name string) (u *Unit, err error) {
 	}
 
 	return nil, ErrNotFound
+}
+
+func (sys *System) parse(name string) (u *Unit, err error) {
+	var v unit.Interface
+	switch filepath.Ext(path) {
+	case ".target":
+		v = &target.Unit{Get: func(name string) (unit.Subber, error) {
+			return sys.Get(name)
+		}}
+	case ".service":
+		v = &service.Unit{}
+	default:
+		panic("Trying to load an unsupported unit type")
+	}
+
+	return sys.Supervise(name, v)
 }
 
 // pathset returns a slice of paths to definitions of supported unit types found in path specified
