@@ -11,7 +11,7 @@ import (
 	"github.com/b1101/systemgo/unit"
 )
 
-var ErrIsLoading = errors.New("Unit is already loading")
+var ErrIsStarting = errors.New("Unit is already starting")
 
 type Unit struct {
 	unit.Interface
@@ -128,8 +128,8 @@ func (u *Unit) Start() (err error) {
 	}()
 
 	log.Debugf("Start called on %p", u)
-	if u.IsLoading() {
-		return ErrIsLoading
+	if u.IsStarting() {
+		return ErrIsStarting
 	}
 
 	u.Log.Println("Starting...")
@@ -195,7 +195,7 @@ func (u *Unit) Wait() {
 func (u *Unit) IsActive() bool {
 	return u.Active() == unit.Active
 }
-func (u *Unit) IsLoading() bool {
+func (u *Unit) IsStarting() bool {
 	return u.loading != nil
 }
 
