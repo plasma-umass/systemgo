@@ -2,7 +2,6 @@
 package service
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"os/exec"
@@ -13,9 +12,6 @@ import (
 )
 
 const DEFAULT_TYPE = "simple"
-
-var ErrNotStarted = errors.New("Service not started")
-var ErrNotParsed = errors.New("Unit is not parsed properly")
 
 var supported = map[string]bool{
 	"oneshot": true,
@@ -92,7 +88,7 @@ func (sv *Unit) Start() (err error) {
 	}()
 
 	if sv.Cmd == nil {
-		panic(ErrNotParsed)
+		panic(unit.ErrNotParsed)
 	}
 
 	switch sv.Definition.Service.Type {
@@ -108,9 +104,9 @@ func (sv *Unit) Start() (err error) {
 // Stop stops execution of the command specified in service definition
 func (sv *Unit) Stop() (err error) {
 	if sv.Cmd == nil {
-		panic(ErrNotParsed)
+		panic(unit.ErrNotParsed)
 	} else if sv.Cmd.Process == nil {
-		return ErrNotStarted
+		return unit.ErrNotStarted
 	}
 	return sv.Process.Kill()
 }

@@ -10,8 +10,9 @@ var ErrNotExist = errors.New("Does not exist")
 var ErrNotSupported = errors.New("Not supported")
 var ErrUnknownType = errors.New("Unknown type")
 var ErrPathNotAbs = errors.New("Path specified is not absolute")
-var ErrNotLoaded = errors.New("Unit definition is not loaded properly")
+var ErrNotParsed = errors.New("Unit definition is not parsed properly")
 var ErrWrongVal = errors.New("Wrong value received")
+var ErrNotStarted = errors.New("Unit not started")
 
 type ParseError struct {
 	Source string
