@@ -150,11 +150,10 @@ func (sv *Unit) sub() (s Sub) {
 		// Wait has not returned yet
 		return Running
 
-	case sv.ProcessState.Success() && def.Type == "oneshot" && def.RemainAfterExit:
-		// Service process successfully exited
-		return Exited
-
-	case sv.ProcessState.Exited():
+	case sv.ProcessState.Exited(), sv.ProcessState.Success():
+		if sv.Definition.Service.RemainAfterExit {
+			return Exited
+		}
 		return Dead
 
 	default:
