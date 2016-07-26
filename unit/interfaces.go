@@ -11,8 +11,6 @@ type Interface interface {
 	Documentation() string
 
 	Dependency
-
-	Orderable
 }
 
 type Definer interface {
@@ -54,9 +52,7 @@ type Dependency interface {
 
 	RequiredBy() []string
 	WantedBy() []string
-}
 
-type Orderable interface {
 	After() []string
 	Before() []string
 }
