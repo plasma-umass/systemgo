@@ -106,10 +106,14 @@ func (sv *Unit) Stop() (err error) {
 	return sv.Process.Kill()
 }
 
-// Active reports activation status of a service
 func (sv *Unit) Active() unit.Activation {
+	return sv.sub().Active()
+}
+
+// Active reports activation status of a service
+func (s Sub) Active() unit.Activation {
 	// based of Systemd transtition table found in https://goo.gl/oEjikJ
-	switch sv.sub() {
+	switch s {
 	case Dead:
 		return unit.Inactive
 	case Failed:
