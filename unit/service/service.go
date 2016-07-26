@@ -15,6 +15,7 @@ import (
 const DEFAULT_TYPE = "simple"
 
 var ErrNotStarted = errors.New("Service not started")
+var ErrNotParsed = errors.New("Unit is not parsed properly")
 
 var supported = map[string]bool{
 	"oneshot": true,
@@ -91,21 +92,24 @@ func (sv *Unit) Start() (err error) {
 	}()
 
 	if sv.Cmd == nil {
-		sv.Cmd = parseCommand(sv.Definition.Service.ExecStart)
+		panic(ErrNotParsed)
 	}
+
 	switch sv.Definition.Service.Type {
 	case "simple":
 		return sv.Cmd.Start()
 	case "oneshot":
 		return sv.Cmd.Run()
 	default:
-		return unit.ErrNotSupported
+		panic("Unknown service type")
 	}
 }
 
 // Stop stops execution of the command specified in service definition
 func (sv *Unit) Stop() (err error) {
 	if sv.Cmd == nil {
+		panic(ErrNotParsed)
+	} else if sv.Cmd.Process == nil {
 		return ErrNotStarted
 	}
 	return sv.Process.Kill()
@@ -136,8 +140,7 @@ func (sv *Unit) Active() unit.Activation {
 	case Stop, StopSigabrt, StopPost, StopSigkill, StopSigterm, FinalSigkill, FinalSigterm:
 		return unit.Deactivating
 	default:
-		// Unreachable
-		return -1
+		panic("Unknown service sub state")
 	}
 }
 
