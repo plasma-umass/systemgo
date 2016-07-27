@@ -24,8 +24,6 @@ var supported = map[string]bool{
 type Unit struct {
 	Definition
 	*exec.Cmd
-
-	waitch chan Sub
 }
 
 // Service unit definition
@@ -78,10 +76,6 @@ func (sv *Unit) Define(r io.Reader /*, errch chan<- error*/) (err error) {
 
 // Start executes the command specified in service definition
 func (sv *Unit) Start() (err error) {
-	if sv.Cmd == nil {
-		panic(unit.ErrNotParsed)
-	}
-
 	switch sv.Definition.Service.Type {
 	case "simple":
 		if err = sv.Cmd.Start(); err == nil {
@@ -97,48 +91,17 @@ func (sv *Unit) Start() (err error) {
 
 // Stop stops execution of the command specified in service definition
 func (sv *Unit) Stop() (err error) {
-	if sv.Cmd == nil {
-		panic(unit.ErrNotParsed)
-	} else if sv.Cmd.Process == nil {
+	if sv.Cmd.Process == nil {
 		return unit.ErrNotStarted
 	}
 
 	return sv.Process.Kill()
 }
 
-func (sv *Unit) Active() unit.Activation {
-	return sv.sub().Active()
-}
-
-// Active reports activation status of a service
-func (s Sub) Active() unit.Activation {
-	// based of Systemd transtition table found in https://goo.gl/oEjikJ
-	switch s {
-	case Dead:
-		return unit.Inactive
-	case Failed:
-		return unit.Failed
-	case Reload:
-		return unit.Reloading
-	case Running, Exited:
-		return unit.Active
-	case Start, StartPre, StartPost, AutoRestart:
-		return unit.Activating
-	case Stop, StopSigabrt, StopPost, StopSigkill, StopSigterm, FinalSigkill, FinalSigterm:
-		return unit.Deactivating
-	default:
-		panic("Unknown service sub state")
-	}
-}
-
 // Sub reports the sub status of a service
-func (sv *Unit) Sub() string {
-	return sv.sub().String()
-}
-
-func (sv *Unit) sub() (s Sub) {
+func (sv *Unit) Sub() Sub {
 	if sv.Cmd == nil {
-		return
+		panic(unit.ErrNotParsed)
 	}
 
 	switch {
@@ -159,5 +122,30 @@ func (sv *Unit) sub() (s Sub) {
 	default:
 		// Service process has finished, but did not return a 0 exit code
 		return Failed
+	}
+}
+
+func (sv *Unit) Active() unit.Activation {
+	return sv.Sub().Active()
+}
+
+// Active reports activation status of a service
+func (s Sub) Active() unit.Activation {
+	// based of Systemd transtition table found in https://goo.gl/oEjikJ
+	switch s {
+	case Dead:
+		return unit.Inactive
+	case Failed:
+		return unit.Failed
+	case Reload:
+		return unit.Reloading
+	case Running, Exited:
+		return unit.Active
+	case Start, StartPre, StartPost, AutoRestart:
+		return unit.Activating
+	case Stop, StopSigabrt, StopPost, StopSigkill, StopSigterm, FinalSigkill, FinalSigterm:
+		return unit.Deactivating
+	default:
+		panic("Unknown service sub state")
 	}
 }
