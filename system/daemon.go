@@ -1,7 +1,6 @@
 package system
 
 import (
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -23,11 +22,11 @@ var ErrExists = fmt.Errorf("Unit already exists")
 var DEFAULT_PATHS = []string{"/etc/systemd/system/", "/run/systemd/system", "/lib/systemd/system"}
 
 type Daemon struct {
-	// Map containing pointers to all currently active units(name -> *Unit)
-	active map[*Unit]bool
+	//// Map containing pointers to all currently active units(name -> *Unit)
+	//active map[*Unit]bool
 
-	// Map containing pointers to all successfully loaded units(name -> *Unit)
-	loaded map[*Unit]bool
+	//// Map containing pointers to all successfully loaded units(name -> *Unit)
+	//loaded map[*Unit]bool
 
 	// Map of created units (name -> *Unit)
 	units map[string]*Unit
@@ -44,7 +43,7 @@ type Daemon struct {
 	// System log
 	Log *Log
 
-	Jobs Jobs
+	Jobs jobs
 }
 
 func New() (sys *Daemon) {
@@ -195,58 +194,81 @@ func (sys *Daemon) Supervise(name string, uInt unit.Interface) (u *Unit, err err
 	return
 }
 
+// Unit looks up the unit name in the internal hasmap of loaded units and returns it
+// If error is returned, it will be error from sys.Load(name)
+func (sys *Daemon) Unit(name string) (u *Unit, err error) {
+	var ok bool
+	if u, ok = sys.units[name]; !ok {
+		return nil, ErrNotFound
+	}
+	return
+}
+
 // Get looks up the unit name in the internal hasmap of loaded units and calls
 // sys.Load(name) if it can not be found
 // If error is returned, it will be error from sys.Load(name)
 func (sys *Daemon) Get(name string) (u *Unit, err error) {
-	var ok bool
-	if u, ok = sys.units[name]; !ok || !sys.loaded[u] {
+	if u, err = sys.Unit(name); err != nil || !u.IsLoaded() {
 		return sys.Load(name)
 	}
 	return
 }
 
 func (sys *Daemon) Restart(u *Unit) (err error) {
-	if !sys.active[u] {
+	if !u.IsActive() {
 		return ErrNotActive
 	}
 	sys.Jobs.Assign(u, restart)
 	return
 }
 
-func (sys *Daemon) Reload(u *Unit) (err error) {
-	if reloader, ok := u.Interface.(unit.Reloader); !ok {
-		return ErrNoReload
-	} else {
-		return reloader.Reload()
+// TODO
+func (sys *Daemon) Enable(name string) (err error) {
+	var u *Unit
+	if u, err = sys.Get(name); err != nil {
+		return
 	}
-}
-
-// TODO
-func (sys *Daemon) Enable(u *Unit) (err error) {
-	u.Log.Println("enable")
+	//u.Interface.WantedBy()
 	return ErrNotImplemented
 }
 
 // TODO
-func (sys *Daemon) Disable(u *Unit) (err error) {
-	u.Log.Println("disable")
+func (sys *Daemon) Disable(name string) (err error) {
+	var u *Unit
+	if u, err = sys.Get(name); err != nil {
+		return
+	}
+	//u.Interface.WantedBy()
 	return ErrNotImplemented
 }
 
-func (sys *Daemon) Stop(u *Unit) (err error) {
-	log.Debugf("sys.Stop name: %s", u.name)
+func (sys *Daemon) Stop(names ...string) (err error) {
+	log.Debugf("sys.Stop name: %s", name)
 
-	if !sys.active[u] {
+	var u *Unit
+	if u, err = sys.Get(name); err != nil {
+		return
+	}
+
+	if !u.IsActive() {
 		return ErrNotActive
 	}
-	if err = u.Stop(); err == nil {
-		delete(sys.active, u)
-	}
-	return
+	return u.Stop()
 }
 
-func (sys *Daemon) Start(units ...*Unit) (err error) {
+// job.Run()
+
+func (sys *Daemon) Start(names ...string) (err error) {
+	targ := target.Unit{}
+	t := newTransaction(startJob{
+		target.Unit{
+			Definition: {
+				Unit: {
+					Requires: names,
+				},
+			},
+		},
+	})
 	var deps map[string]*Unit
 	if deps, err = sys.loadDeps(units); err != nil {
 		return
@@ -353,7 +375,6 @@ func (sys *Daemon) Load(name string) (u *Unit, err error) {
 		}
 
 		u.loaded = unit.Loaded
-		sys.loaded[u] = true
 
 		return u, err
 	}
@@ -361,9 +382,9 @@ func (sys *Daemon) Load(name string) (u *Unit, err error) {
 	return nil, ErrNotFound
 }
 
-func (sys *System) parse(name string) (u *Unit, err error) {
+func (sys *Daemon) parse(name string) (u *Unit, err error) {
 	var v unit.Interface
-	switch filepath.Ext(path) {
+	switch filepath.Ext(name) {
 	case ".target":
 		v = &target.Unit{Get: func(name string) (unit.Subber, error) {
 			return sys.Get(name)
@@ -407,34 +428,25 @@ func pathset(path string) (definitions []string, err error) {
 	return
 }
 
-type Jobs struct {
-	sync.Mutex
-
-	assigned map[*Unit]job
-
-	failed map[*Unit]bool
-
-	units chan *Unit
+type jobs struct {
+	n, failed int
+	ch        chan *job
 }
 
-type job int
-
-//go:generate stringer -type=Job
-const (
-	start job = iota
-	stop
-	restart
-)
-
-func (jobs *Jobs) Len() (n int) {
-	return len(jobs.assigned)
+func (j *jobs) Count() int {
+	return j.n
+}
+func (j *jobs) Failed() int {
+	return j.failed
 }
 
-func (jobs *Jobs) Failed() (n int) {
-	return len(jobs.failed)
+func newJobs() (jobs Jobs) {
+	return jobs{
+		ch: make(chan *job),
+	}
 }
 
-func (jobs *Jobs) Assign(u *Unit, j job) {
+func (jobs *jobs) Assign(j Job) {
 	jobs.Lock()
 	log.WithField("func", "Assign").Debugf("locked")
 
@@ -466,12 +478,12 @@ func (jobs *Jobs) Assign(u *Unit, j job) {
 }
 
 func (sys *Daemon) dispatchJobs() {
-	for u := range sys.Jobs.units {
+	for j := range sys.Jobs.ch {
 		sys.Jobs.Lock()
 		log.WithField("func", "dispatchJobs").Debugf("locked")
 		if j, has := sys.Jobs.assigned[u]; has {
-			go sys.dispatch(u, j)
-			delete(sys.Jobs.assigned, u)
+			go j.
+				delete(sys.Jobs.assigned, u)
 		}
 		sys.Jobs.Unlock()
 		log.WithField("func", "dispatchJobs").Debugf("unlocked")
@@ -488,10 +500,7 @@ func (sys *Daemon) dispatch(u *Unit, j job) (err error) {
 	log.WithField("unit", u.name).Debugf("Dispatching a new %s job", j)
 	switch j {
 	case start:
-		if err = u.Start(); err == nil {
-			sys.active[u] = true
-		}
-		return
+		return u.Start()
 	case stop:
 		return sys.Stop(u)
 	case restart:
@@ -502,140 +511,4 @@ func (sys *Daemon) dispatch(u *Unit, j job) (err error) {
 	default:
 		panic("Unknown job type")
 	}
-}
-
-// returns a map (name -> *Unit) containing dependencies and specified units
-func (sys *Daemon) loadDeps(units []*Unit) (deps map[string]*Unit, err error) {
-	deps = map[string]*Unit{}
-	added := func(name string) (is bool) {
-		_, is = deps[name]
-		return
-	}
-
-	var failed bool
-
-	names := make([]string, len(units))
-	for i, u := range units {
-		names[i] = u.name
-	}
-
-	for len(names) > 0 {
-		name := names[0]
-
-		if !added(name) {
-			var u *Unit
-			if u, err = sys.Get(name); err != nil {
-				return nil, fmt.Errorf("Error loading dependency: %s", name)
-			}
-			deps[name] = u
-
-			names = append(names, u.Requires()...)
-
-			for _, name := range u.Wants() {
-				if !added(name) {
-					deps[name], _ = sys.Get(name)
-				}
-			}
-		}
-
-		names = names[1:]
-	}
-	if failed {
-		return nil, ErrDepFail
-	}
-
-	return
-}
-
-type graph struct {
-	ordered  map[*Unit]struct{}
-	visited  map[*Unit]struct{}
-	before   map[*Unit]map[string]*Unit
-	ordering []*Unit
-}
-
-func (sys *Daemon) order(units map[string]*Unit) (ordering []*Unit, err error) {
-	log.Debugf("sys.order recieved units:\n%+v", units)
-
-	g := &graph{
-		map[*Unit]struct{}{},
-		map[*Unit]struct{}{},
-		map[*Unit]map[string]*Unit{},
-		make([]*Unit, 0, len(units)),
-	}
-
-	for _, unit := range units {
-		g.before[unit] = map[string]*Unit{}
-	}
-
-	log.Debugf("g.before:\n%+v", g.before)
-
-	for name, unit := range units {
-		log.Debugf("Checking after of %s...", name)
-		for _, depname := range unit.After() {
-			log.Debugf("%s after %s", name, depname)
-			if dep, ok := units[depname]; ok {
-				g.before[unit][depname] = dep
-			}
-		}
-
-		log.Debugf("Checking before of %s...", name)
-		for _, depname := range unit.Before() {
-			log.Debugf("%s before %s", name, depname)
-			if dep, ok := units[depname]; ok {
-				g.before[dep][name] = unit
-			}
-		}
-
-		log.Debugf("Checking requires of %s...", name)
-		for _, depname := range unit.Requires() {
-			log.Debugf("added %s to %s.requires hashmap", depname, name)
-			unit.requires[depname] = units[depname]
-		}
-	}
-
-	log.Debugf("starting DFS on graph:\n%+v", g)
-	for name, unit := range units {
-		log.Debugf("picking %s", name)
-		if err = g.traverse(unit); err != nil {
-			return nil, fmt.Errorf("Dependency cycle determined:\n%s depends on %s", name, err)
-		}
-	}
-
-	return g.ordering, nil
-}
-
-var errBlank = errors.New("")
-
-func (g *graph) traverse(u *Unit) (err error) {
-	log.Debugf("traverse %p, graph %p, ordering:\n%v", u, g, g.ordering)
-	if _, has := g.ordered[u]; has {
-		log.Debugf("%p already ordered", u)
-		return nil
-	}
-
-	if _, has := g.visited[u]; has {
-		log.Debugf("%p already visited", u)
-		return errBlank
-	}
-
-	g.visited[u] = struct{}{}
-
-	for name, dep := range g.before[u] {
-		if err = g.traverse(dep); err != nil {
-			if err == errBlank {
-				return fmt.Errorf("%s\n", name)
-			}
-			return fmt.Errorf("%s\n%s depends on %s", name, name, err)
-		}
-	}
-
-	delete(g.visited, u)
-
-	if _, has := g.ordered[u]; !has {
-		g.ordering = append(g.ordering, u)
-		g.ordered[u] = struct{}{}
-	}
-
-	return nil
 }

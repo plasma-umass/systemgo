@@ -16,29 +16,23 @@ var ErrIsStarting = errors.New("Unit is already starting")
 type Unit struct {
 	unit.Interface
 
+	loading
+
 	name string
-
-	Log *Log
-
 	path string
 
 	loaded unit.Load
 
-	// Interfaces are too expensive to use?
-	//requires map[string]activeWaiter
+	Log *Log
+
 	requires map[string]*Unit
 
-	loading chan struct{}
-
 	system *Daemon
+
+	mutex sync.Mutex
 }
 
 func NewUnit(v unit.Interface) (u *Unit) {
-	if debug {
-		defer func() {
-			u.Log.Hooks.Add(&errorHook{fmt.Sprintf("%p", u)})
-		}()
-	}
 	return &Unit{
 		Interface: v,
 		Log:       NewLog(),
@@ -56,26 +50,14 @@ func (u *Unit) Loaded() unit.Load {
 	return u.loaded
 }
 
-func (u *Unit) Status() fmt.Stringer {
-	st := unit.Status{
-		Load: unit.LoadStatus{
-			Path:   u.Path(),
-			Loaded: u.Loaded(),
-			State:  unit.Enabled,
-		},
-		Activation: unit.ActivationStatus{
-			State: u.Active(),
-			Sub:   u.Sub(),
-		},
-	}
-	// TODO deal with different unit types requiring different status
-	// something like u.Interface.HasX() ?
-	switch u.Interface.(type) {
-	//case *unit.Service:
-	//return unit.ServiceStatus{st}
-	default:
-		return st
-	}
+func (u *Unit) IsActive() bool {
+	return u.Active() == unit.Active
+}
+func (u *Unit) IsStarting() bool {
+	return u.Active() == unit.Activating
+}
+func (u *Unit) IsLoaded() bool {
+	return u.Loaded() == unit.Loaded
 }
 
 func (u *Unit) Active() unit.Activation {
@@ -118,28 +100,69 @@ func (u *Unit) Wants() (names []string) {
 	return
 }
 
-func (u *Unit) Start() (err error) {
-	defer func() {
-		if err != nil {
-			log.Debugf("%p failed to start, error: %s", u, err)
-		} else {
-			log.Debugf("%p started successfully", u)
-		}
-	}()
+func (u *Unit) Status() fmt.Stringer {
+	st := unit.Status{
+		Load: unit.LoadStatus{
+			Path:   u.Path(),
+			Loaded: u.Loaded(),
+			State:  unit.Enabled, // TODO
+		},
+		Activation: unit.ActivationStatus{
+			State: u.Active(),
+			Sub:   u.Sub(),
+		},
+	}
+	// TODO deal with different unit types requiring different status
+	// something like u.Interface.HasX() ?
+	switch u.Interface.(type) {
+	//case *unit.Service:
+	//return unit.ServiceStatus{st}
+	default:
+		return st
+	}
+}
 
+func (u *Unit) Reload() (err error) {
+	if r, ok := u.Interface.(unit.Reloader); ok {
+		return r.Reload()
+	}
+	return ErrNoReload
+}
+
+type loading chan struct{}
+
+func (l *loading) Start() {
+	*l = make(loading)
+}
+
+func (l *loading) Stop() {
+	close(*l)
+}
+
+func (l *loading) Wait() {
+	<-*l
+}
+
+func (u *Unit) Wait() {
+	u.loading.Wait()
+}
+
+func (u *Unit) Start() (err error) {
 	log.Debugf("Start called on %p", u)
-	if u.IsStarting() {
+
+	u.mutex.Lock()
+	defer u.mutex.Unlock()
+
+	u.loading.Start()
+	defer u.loading.Stop()
+
+	if !u.IsLoaded() {
+		return ErrNotLoaded
+	} else if u.IsStarting() {
 		return ErrIsStarting
 	}
 
 	u.Log.Println("Starting...")
-
-	u.loading = make(chan struct{})
-	defer func() {
-		log.Debugf("%p finished loading", u)
-		close(u.loading)
-		u.loading = nil
-	}()
 
 	wg := &sync.WaitGroup{}
 	//for name, dep := range u.requires {
@@ -168,35 +191,21 @@ func (u *Unit) Start() (err error) {
 		return
 	}
 
-	u.system.active[u] = true
 	return u.Interface.Start()
 }
-func (u *Unit) Stop() (err error) {
-	defer func() {
-		if err == nil {
-			u.system.active[u] = false
-		}
-	}()
 
-	if u.Interface == nil || !u.system.loaded[u] {
+func (u *Unit) Stop() (err error) {
+	u.mutex.Lock()
+	defer u.mutex.Unlock()
+
+	u.loading.Start()
+	defer u.loading.Stop()
+
+	if !u.IsLoaded() {
 		return ErrNotLoaded
 	}
 
 	return u.Interface.Stop()
-}
-func (u *Unit) Wait() {
-	if u.loading == nil {
-		return
-	}
-	<-u.loading
-	return
-}
-
-func (u *Unit) IsActive() bool {
-	return u.Active() == unit.Active
-}
-func (u *Unit) IsStarting() bool {
-	return u.loading != nil
 }
 
 func (u *Unit) parseDepDir(suffix string) (paths []string, err error) {
