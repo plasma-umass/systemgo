@@ -8,118 +8,97 @@ import (
 )
 
 type transaction struct {
-	jobs     map[*Unit]job
-	anchor   *job
+	jobs     map[*Unit][JOB_TYPE_COUNT]*job
+	anchored map[*job]bool
 	ordering []*job
 }
 
-//func (sys *Daemon) newTransaction() (t *transaction) {
-//	return &transaction{
-//		system: sys,
-//	}
-//}
-func newTransaction(anchor *job) (t *transaction) {
+func newTransaction() (tr *transaction) {
 	return &transaction{
-		jobs:   map[*Unit]*job{},
-		anchor: anchor,
+		jobMap:   jobMap{},
+		anchored: map[*job]bool{},
 	}
 }
 
-func (t *transaction) Run() (err error) {
-	for j := range t.ordering {
+func (tr *transaction) Run() (err error) {
+	if err = tr.loadDeps(); err != nil {
+		return
+	}
+
+	var ordering []*job
+	if ordering, err = tr.ordering(); err != nil {
+		return
+	}
+
+	for _, j := range ordering {
 		go j.Run()
 	}
 }
 
-func (u *Unit)dependencies() (deps set, err error) {
-	var dep *Unit
-}
+func (tr *transaction) add(typ jobType, u *Unit, parent *job, matters, conflicts) (err error) {
 
-func loadDep(u *Unit, deps set) (err error) {
-	var dep *Unit
-	for _, name := range u.Requires() {
-		if dep, err = u.system.Get(name); err != nil {
-			return
-		}
-		deps.Put(dep)
-	}
-}
-
-// returns a map (name -> *Unit) containing dependencies and specified units
-func loadDeps(units set) (deps set, err error) {
-	var failed bool
-
-	names := make([]string, len(units))
-	for i, u := range units {
-		names[i] = u.name
-	}
-
-	for len(names) > 0 {
-		name := names[0]
-
-		if !added(name) {
-			var u *Unit
-			if u, err = sys.Get(name); err != nil {
-				return nil, fmt.Errorf("Error loading dependency: %s", name)
-			}
-			deps[name] = u
-
-			names = append(names, u.Requires()...)
-
-			for _, name := range u.Wants() {
-				if !added(name) {
-					deps[name], _ = sys.Get(name)
-				}
-			}
-		}
-
-		names = names[1:]
-	}
-	if failed {
-		return nil, ErrDepFail
-	}
-
-	return
-}
-
-func (t *transaction) add(j *job) (err error) {
-	//var u *Unit
-	//if u, err = t.system.Get(name); err != nil {
-	//return
+	// TODO: decide if these checks are really necessary to do here,
+	// as they are performed exactly before a unit is started, reloaded etc.
+	//
+	//switch typ {
+	//case reload:
+	//	if !u.IsReloader() {
+	//		return ErrNoReload
+	//	}
+	//case start:
+	//	if !u.CanStart() {}
 	//}
-	//assigned, has := t.jobs[u]
-	assigned, has := t.jobs[j.unit]
-	if !has {
-		log.Debugf("Assigned a new job(%s) for %s", j, u.Name())
-		t.jobs[j.unit] = j
-		return
+
+	if j = tr.jobs[u][typ]; j == nil {
+		j = newJob(typ, u)
+		jobs[u][typ] = j
+		isNew = true
 	}
 
-	//return map[a][b] (nil)/(error)
-
-	//if assigned != j {
-	////return error
-	//}
 	switch {
+	case conflicts:
+		parent.conflicts.Put(j)
+		j.conflictedBy.Put(parent)
+	case matters:
+		parent.requires.Put(j)
+		j.requiredBy.Put(parent)
 	default:
-		t.jobs[j.unit] = j
+		parent.wants.Put(j)
+		j.wantedBy.Put(parent)
 	}
-	return
-}
 
-type set map[*Unit]struct{}
+	if isNew && recursive {
+		for _, name := range u.Conflicts() {
+			dep, err := u.System.Get(name)
+			if err != nil {
+				return
+			}
 
-func (s set) Put(u *Unit) {
-	s[u] = struct{}{}
-}
+			if err = tr.add(stop, dep, j, true, true); err != nil {
+				return
+			}
+		}
 
-func (s set) Contains(u *Unit) (ok bool) {
-	_, ok = s[u]
-	return
-}
+		for _, name := range u.Requires() {
+			dep, err := u.System.Get(name)
+			if err != nil {
+				return
+			}
 
-func (s set) Remove(u *Unit) {
-	delete(s, u)
+			if err = tr.add(start, dep, j, true, false); err != nil {
+				return
+			}
+		}
+
+		for _, name := range u.Wants() {
+			dep, err := u.System.Get(name)
+			if err != nil {
+				continue
+			}
+
+			tr.add(start, dep, j, false, false)
+		}
+	}
 }
 
 type ordering struct {
@@ -195,7 +174,7 @@ func order(units set) (ordering []*Unit, err error) {
 		}
 
 		log.Debugf("Checking before of %s...", u.name)
-		for _, depname := range unit.Before() {
+		for _, depname := range u.Before() {
 			log.Debugf("%s before %s", u.name, depname)
 			if dep, err := u.system.Unit(depname); err == nil && units.Contains(dep) {
 				g.before[dep].Put(u)

@@ -25,18 +25,17 @@ type Unit struct {
 
 	Log *Log
 
-	requires map[string]*Unit
-
-	system *Daemon
+	System *Daemon
 
 	mutex sync.Mutex
+
+	job *job
 }
 
 func NewUnit(v unit.Interface) (u *Unit) {
 	return &Unit{
 		Interface: v,
 		Log:       NewLog(),
-		//requires:  map[string]*Unit{},
 	}
 }
 
@@ -61,9 +60,17 @@ func (u *Unit) IsLoaded() bool {
 }
 
 func (u *Unit) Active() unit.Activation {
-	if u.Interface == nil {
+	switch {
+	case u.job != nil:
+		switch u.job.typ {
+		case start:
+			return "starting"
+		case stop:
+			return "stopping"
+		}
+	case u.Interface == nil:
 		return unit.Inactive
-	} else {
+	default:
 		return u.Interface.Active()
 	}
 }
@@ -71,9 +78,9 @@ func (u *Unit) Active() unit.Activation {
 func (u *Unit) Sub() string {
 	if u.Interface == nil {
 		return "dead"
-	} else {
-		return u.Interface.Sub()
 	}
+
+	return u.Interface.Sub()
 }
 
 // Requires returns a slice of unit names as found in definition and absolute paths
@@ -122,11 +129,17 @@ func (u *Unit) Status() fmt.Stringer {
 	}
 }
 
+func (u *Unit) IsReloader() (ok bool) {
+	_, ok = u.Interface.(unit.Reloader)
+	return
+}
+
 func (u *Unit) Reload() (err error) {
-	if r, ok := u.Interface.(unit.Reloader); ok {
-		return r.Reload()
+	reloader, ok := u.Interface.(unit.Reloader)
+	if !ok {
+		return ErrNoReload
 	}
-	return ErrNoReload
+	return reloader.Reload()
 }
 
 type loading chan struct{}
@@ -145,6 +158,15 @@ func (l *loading) Wait() {
 
 func (u *Unit) Wait() {
 	u.loading.Wait()
+}
+
+func (u *Unit) start() (err error) {
+	t := newTransaction()
+	j := &startJob{
+		u,
+	}
+	t.add(j)
+	t.anchor(j)
 }
 
 func (u *Unit) Start() (err error) {
@@ -188,10 +210,15 @@ func (u *Unit) Start() (err error) {
 	wg.Wait()
 	log.Debugf("All dependencies of %p finished loading", u)
 	if err != nil {
-		return
+		return err
 	}
 
-	return u.Interface.Start()
+	starter, ok := u.Interface.(unit.Starter)
+	if !ok {
+		return nil
+	}
+
+	return starter.Start()
 }
 
 func (u *Unit) Stop() (err error) {
@@ -205,10 +232,19 @@ func (u *Unit) Stop() (err error) {
 		return ErrNotLoaded
 	}
 
-	return u.Interface.Stop()
+	stopper, ok := u.Interface.(unit.Stopper)
+	if !ok {
+		return nil
+	}
+
+	return stopper.Stop()
 }
 
 func (u *Unit) parseDepDir(suffix string) (paths []string, err error) {
+	if u.path == "" {
+		return paths, errors.New("Path is empty")
+	}
+
 	dirpath := u.path + suffix
 
 	links, err := pathset(dirpath)

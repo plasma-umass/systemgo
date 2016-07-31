@@ -5,7 +5,6 @@ import "io"
 type Interface interface {
 	Definer
 	Subber
-	StartStopper
 
 	Description() string
 	Documentation() string

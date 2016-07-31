@@ -5,7 +5,6 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"sync"
 	"time"
 
 	"github.com/b1101/systemgo/unit"
@@ -22,12 +21,6 @@ var ErrExists = fmt.Errorf("Unit already exists")
 var DEFAULT_PATHS = []string{"/etc/systemd/system/", "/run/systemd/system", "/lib/systemd/system"}
 
 type Daemon struct {
-	//// Map containing pointers to all currently active units(name -> *Unit)
-	//active map[*Unit]bool
-
-	//// Map containing pointers to all successfully loaded units(name -> *Unit)
-	//loaded map[*Unit]bool
-
 	// Map of created units (name -> *Unit)
 	units map[string]*Unit
 
@@ -259,54 +252,60 @@ func (sys *Daemon) Stop(names ...string) (err error) {
 // job.Run()
 
 func (sys *Daemon) Start(names ...string) (err error) {
-	targ := target.Unit{}
-	t := newTransaction(startJob{
-		target.Unit{
-			Definition: {
-				Unit: {
-					Requires: names,
-				},
-			},
-		},
-	})
-	var deps map[string]*Unit
-	if deps, err = sys.loadDeps(units); err != nil {
-		return
-	}
-	log.Debugf("sys.loadDeps returned:\n%+v, nil", units)
+	tr := newTransaction()
 
-	var ordering []*Unit
-	if ordering, err = sys.order(deps); err != nil {
-		return
-	}
-	log.Debugf("sys.order returned:\n%+v, nil", ordering)
-
-	for _, u := range ordering {
-		wg := &sync.WaitGroup{}
-		for _, name := range u.Conflicts() {
-			log.Debugf("%p conflicts with %s", u, name)
-			wg.Add(1)
-			go func(name string) {
-				if u, err = sys.Get(name); err != nil {
-					return
-				}
-				if err = sys.Stop(u); err != nil {
-					u.Log.Printf("Error stopping %s: %s", name, err)
-				}
-				wg.Done()
-			}(name)
-
+	for _, name := range names {
+		var dep *Unit
+		if dep, err = sys.Get(name); err != nil {
+			return
 		}
-		wg.Wait()
-		if err != nil {
-			return ErrDepConflict
+		if err = tr.add(start, dep, nil, true, false); err != nil {
+		// TODO: start everything that is possible to start
+		return
 		}
-
-		sys.Jobs.Assign(u, start)
 	}
 
-	return
+	return tr.Run()
 }
+
+//var deps map[string]*Unit
+//if deps, err = sys.loadDeps(units); err != nil {
+//return
+//}
+//log.Debugf("sys.loadDeps returned:\n%+v, nil", units)
+
+//var ordering []*Unit
+//if ordering, err = sys.order(deps); err != nil {
+//return
+//}
+//log.Debugf("sys.order returned:\n%+v, nil", ordering)
+
+//for _, u := range ordering {
+//wg := &sync.WaitGroup{}
+//for _, name := range u.Conflicts() {
+//log.Debugf("%p conflicts with %s", u, name)
+//wg.Add(1)
+//go func(name string) {
+//if u, err = sys.Get(name); err != nil {
+//return
+//}
+//if err = sys.Stop(u); err != nil {
+//u.Log.Printf("Error stopping %s: %s", name, err)
+//}
+//wg.Done()
+//}(name)
+
+//}
+//wg.Wait()
+//if err != nil {
+//return ErrDepConflict
+//}
+
+//sys.Jobs.Assign(u, start)
+//}
+
+//return
+//}
 
 // Load searches for a definition of unit name in configured paths parses it and returns a pointer to Unit
 // If a unit name has already been parsed(tried to load) by sys, it will not create a new unit, but return a pointer to already created unit instead
