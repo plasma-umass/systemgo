@@ -8,23 +8,20 @@ import (
 )
 
 type transaction struct {
-	jobs     map[*Unit][JOB_TYPE_COUNT]*job
+	jobs     map[*Unit]prospectiveJobs
 	anchored map[*job]bool
-	ordering []*job
 }
+
+type prospectiveJobs [JOB_TYPE_COUNT]*job
 
 func newTransaction() (tr *transaction) {
 	return &transaction{
-		jobMap:   jobMap{},
+		jobs:     map[*Unit]prospectiveJobs{},
 		anchored: map[*job]bool{},
 	}
 }
 
 func (tr *transaction) Run() (err error) {
-	if err = tr.loadDeps(); err != nil {
-		return
-	}
-
 	var ordering []*job
 	if ordering, err = tr.ordering(); err != nil {
 		return
@@ -35,7 +32,57 @@ func (tr *transaction) Run() (err error) {
 	}
 }
 
-func (tr *transaction) add(typ jobType, u *Unit, parent *job, matters, conflicts) (err error) {
+func (tr *transaction) ordering() (ordering []*job) {
+	jobs := set{}
+	unmerged := map[*Unit]*prospectiveJobs{}
+
+	for u, prospective := range tr.jobs {
+		unmerged[u] = prospective
+	}
+
+	for len(unmerged) > 0 {
+		for u, prospective := range unmerged {
+			merged, err := prospective.merge()
+			if err != nil {
+				// TODO: try to fix
+				//
+				// for _, j := range prospective
+				// if !j.anchored
+				// delete j
+				//
+				delete(unmerged, u)
+				continue
+			}
+
+			delete(unmerged, u)
+			jobs.Put(merged)
+		}
+	}
+}
+
+func (prospective prospectiveJobs) merge() (merged *job, err error) {
+	for _, j := range prospective {
+		if j == nil {
+			continue
+		}
+
+		if merged == nil {
+			merged = j
+			continue
+		}
+
+		var t jobType
+		if t, ok = mergeTable[j.typ][other.typ]; !ok {
+			return ErrUnmergeable
+		}
+
+		merged.typ = t
+	}
+
+	return
+}
+
+func (tr *transaction) add(typ jobType, u *Unit, parent *job, matters, conflicts bool) (err error) {
 
 	// TODO: decide if these checks are really necessary to do here,
 	// as they are performed exactly before a unit is started, reloaded etc.
@@ -67,7 +114,7 @@ func (tr *transaction) add(typ jobType, u *Unit, parent *job, matters, conflicts
 		j.wantedBy.Put(parent)
 	}
 
-	if isNew && recursive {
+	if isNew {
 		for _, name := range u.Conflicts() {
 			dep, err := u.System.Get(name)
 			if err != nil {
@@ -101,126 +148,92 @@ func (tr *transaction) add(typ jobType, u *Unit, parent *job, matters, conflicts
 	}
 }
 
-type ordering struct {
-	indexes map[*Unit]int
-	index   int
-}
-
-func newOrdering() (o *ordering) {
-	return &ordering{
-		indexes: map[*Unit]int{},
-	}
-}
-
-func (o *ordering) Append(u *Unit) {
-	o.indexes[u] = o.index
-	o.index++
-}
-
-func (o *ordering) Contains(u *Unit) (ok bool) {
-	_, ok = o.indexes[u]
-	return
-}
-
-func (o *ordering) Ordering() (ordering []*Unit) {
-	units := make([]*Unit, o.index)
-	for u, i := range o.indexes {
-		units[i] = u
-	}
-
-	ordering = make([]*Unit, len(o.indexes))
-	for _, u := range units {
-		ordering = append(ordering, u)
-	}
-
-	return
-}
-
 type graph struct {
-	units   set
-	visited set
-	before  map[*Unit]set
-	ordering
-	// wantedBy []*Unit
-	// requiredBy []*Unit
-
+	jobs     set
+	visited  set
+	ordering []*job
 }
 
-func newGraph(units set) (g *graph) {
+func newGraph(jobs set) (g *graph) {
 	return &graph{
-		units:    units,
+		jobs:     jobs,
 		visited:  set{},
-		before:   map[*Unit]set{},
-		ordering: newOrdering(),
+		ordering: make([]*job, 0, len(jobs)),
 	}
 }
 
-func order(units set) (ordering []*Unit, err error) {
-	log.Debugf("sys.order received units:\n%+v", units)
+func order(jobs set) (ordering []*job, err error) {
+	log.Debugf("sys.order received jobs:\n%+v", jobs)
 
-	g := newGraph(units)
+	g := newGraph(jobs)
 
-	for u := range units {
-		g.before[u] = set{}
-	}
+	for j := range jobs {
+		log.Debugf("Checking after of %s...", j)
+		for _, depname := range j.unit.After() {
+			var dep *Unit
+			if dep, err = j.unit.system.Unit(depname); err != nil {
+				continue
+			}
 
-	for u := range units {
-		log.Debugf("Checking after of %s...", u.name)
-		for _, depname := range u.After() {
-			log.Debugf("%s after %s", u.name, depname)
-			if dep, err := u.system.Unit(depname); err == nil && units.Contains(dep) {
-				g.before[u].Put(dep)
+			depJob, ok := jobs[dep]
+			if ok {
+				j.after.Put(depJob)
+				depJob.before.Put(j)
 			}
 		}
 
-		log.Debugf("Checking before of %s...", u.name)
-		for _, depname := range u.Before() {
-			log.Debugf("%s before %s", u.name, depname)
-			if dep, err := u.system.Unit(depname); err == nil && units.Contains(dep) {
-				g.before[dep].Put(u)
+		log.Debugf("Checking before of %s...", j)
+		for _, depname := range j.unit.Before() {
+			var dep *Unit
+			if dep, err = j.unit.system.Unit(depname); err != nil {
+				continue
+			}
+
+			depJob, ok := jobs[dep]
+			if ok {
+				depJob.after.Put(j)
+				j.before.Put(depJob)
 			}
 		}
 	}
 
 	log.Debugf("starting DFS on graph:\n%+v", g)
-	for u := range units {
-		log.Debugf("picking %s", u.name)
-		if err = g.traverse(u); err != nil {
-			return nil, fmt.Errorf("Dependency cycle determined:\n%s depends on %s", u.name, err)
+	for j := range jobs {
+		if err = g.traverse(j); err != nil {
+			return nil, fmt.Errorf("Dependency cycle determined:\njob for %s depends on %s", j.unit.Name(), err)
 		}
 	}
 
-	return g.ordering.Order(), nil
+	return g.ordering, nil
 }
 
 var errBlank = errors.New("")
 
-func (g *graph) traverse(u *Unit) (err error) {
-	log.Debugf("traverse %p, graph %p, ordering:\n%v", u, g, g.ordering)
-	if g.ordering.Contains(u) {
+func (g *graph) traverse(j *job) (err error) {
+	log.Debugf("traverse %s\ngraph: %s\n\n", j, g)
+	if g.ordering.Contains(j) {
 		return nil
 	}
 
-	if g.visited.Contains(u) {
+	if g.visited.Contains(j) {
 		return errBlank
 	}
 
-	g.visited.Put(u)
+	g.visited.Put(j)
 
-	for name, dep := range g.before[u] {
-		if err = g.traverse(dep); err != nil {
+	for depJob := range j.after {
+		if err = g.traverse(depJob); err != nil {
 			if err == errBlank {
-				return fmt.Errorf("%s\n", name)
+				return fmt.Errorf("%s\n", depJob)
 			}
-			return fmt.Errorf("%s\n%s depends on %s", name, name, err)
+			return fmt.Errorf("%s\n%s depends on %s", j, j, err)
 		}
 	}
 
-	g.visited.Remove(u)
+	g.visited.Remove(j)
 
-	if !g.ordering.Contains(u) {
-		log.Debugf()
-		g.ordering.Append(u)
+	if !g.ordering.Contains(j) {
+		g.ordering = append(g.ordering, j)
 	}
 
 	return nil

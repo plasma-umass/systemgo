@@ -1,6 +1,9 @@
 package system
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
 var ErrUnmergeable = errors.New("Unmergeable job types")
 
@@ -10,8 +13,12 @@ type job struct {
 
 	wants, requires, conflicts         set
 	wantedBy, requiredBy, conflictedBy set
+	after, before                      set
 }
 
+const JOB_TYPE_COUNT = 4
+
+//go:generate stringer -type=jobType job.go
 const (
 	start jobType = iota
 	stop
@@ -24,6 +31,10 @@ func newJob(typ jobType, u *Unit) (j *job) {
 		typ:  typ,
 		unit: u,
 	}
+}
+
+func (j *job) String() string {
+	return fmt.Sprintf("%s job for %s", j.typ, j.unit.Name())
 }
 
 type set map[*job]struct{}
