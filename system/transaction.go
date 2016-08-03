@@ -9,9 +9,10 @@ import (
 
 type transaction struct {
 	// TODO rename as unmerged
-	jobs     map[*Unit]prospectiveJobs
+	jobs   map[*Unit]prospectiveJobs
+	merged map[*Unit]*job
+
 	anchored map[*job]bool
-	merged   set
 }
 
 type prospectiveJobs [JOB_TYPE_COUNT]*job
@@ -25,8 +26,12 @@ func newTransaction() (tr *transaction) {
 }
 
 func (tr *transaction) Run() (err error) {
+	if err = tr.merge(); err != nil {
+		return
+	}
+
 	var ordering []*job
-	if ordering, err = tr.ordering(); err != nil {
+	if ordering, err = tr.order(); err != nil {
 		return
 	}
 
@@ -35,9 +40,7 @@ func (tr *transaction) Run() (err error) {
 	}
 }
 
-func (tr *transaction) ordering() (ordering []*job) {
-	jobs := set{}
-
+func (tr *transaction) merge() (err error) {
 	// Do not stop until everything is merged
 	for len(tr.jobs) > 0 {
 		for u, prospective := range tr.jobs {
@@ -241,33 +244,32 @@ func (tr *transaction) add(typ jobType, u *Unit, parent *job, matters, conflicts
 }
 
 type graph struct {
-	jobs     set
-	visited  set
-	ordering []*job
+	visited, ordered set
+	ordering         []*job
 }
 
 func newGraph(jobs set) (g *graph) {
 	return &graph{
-		jobs:     jobs,
 		visited:  set{},
+		ordered:  set{},
 		ordering: make([]*job, 0, len(jobs)),
 	}
 }
 
-func order(jobs set) (ordering []*job, err error) {
+func (tr *transaction) order() (ordering []*job, err error) {
 	log.Debugf("sys.order received jobs:\n%+v", jobs)
 
 	g := newGraph(jobs)
 
-	for j := range jobs {
+	for u, j := range tr.merged {
 		log.Debugf("Checking after of %s...", j)
-		for _, depname := range j.unit.After() {
+		for _, depname := range u.After() {
 			var dep *Unit
-			if dep, err = j.unit.system.Unit(depname); err != nil {
+			if dep, err = u.system.Unit(depname); err != nil {
 				continue
 			}
 
-			depJob, ok := jobs[dep]
+			depJob, ok := tr.merged[dep]
 			if ok {
 				j.after.Put(depJob)
 				depJob.before.Put(j)
@@ -275,13 +277,13 @@ func order(jobs set) (ordering []*job, err error) {
 		}
 
 		log.Debugf("Checking before of %s...", j)
-		for _, depname := range j.unit.Before() {
+		for _, depname := range u.Before() {
 			var dep *Unit
-			if dep, err = j.unit.system.Unit(depname); err != nil {
+			if dep, err = u.system.Unit(depname); err != nil {
 				continue
 			}
 
-			depJob, ok := jobs[dep]
+			depJob, ok := tr.merged[dep]
 			if ok {
 				depJob.after.Put(j)
 				j.before.Put(depJob)
@@ -290,8 +292,8 @@ func order(jobs set) (ordering []*job, err error) {
 	}
 
 	log.Debugf("starting DFS on graph:\n%+v", g)
-	for j := range jobs {
-		if err = g.traverse(j); err != nil {
+	for _, j := range tr.merged {
+		if err = g.order(j); err != nil {
 			return nil, fmt.Errorf("Dependency cycle determined:\njob for %s depends on %s", j.unit.Name(), err)
 		}
 	}
@@ -301,9 +303,9 @@ func order(jobs set) (ordering []*job, err error) {
 
 var errBlank = errors.New("")
 
-func (g *graph) traverse(j *job) (err error) {
-	log.Debugf("traverse %s\ngraph: %s\n\n", j, g)
-	if g.ordering.Contains(j) {
+func (g *graph) order(j *job) (err error) {
+	log.Debugf("order %s\ngraph: %s\n\n", j, g)
+	if g.ordered.Contains(j) {
 		return nil
 	}
 
@@ -314,7 +316,7 @@ func (g *graph) traverse(j *job) (err error) {
 	g.visited.Put(j)
 
 	for depJob := range j.after {
-		if err = g.traverse(depJob); err != nil {
+		if err = g.order(depJob); err != nil {
 			if err == errBlank {
 				return fmt.Errorf("%s\n", depJob)
 			}
@@ -324,7 +326,7 @@ func (g *graph) traverse(j *job) (err error) {
 
 	g.visited.Remove(j)
 
-	if !g.ordering.Contains(j) {
+	if !g.ordered.Contains(j) {
 		g.ordering = append(g.ordering, j)
 	}
 
