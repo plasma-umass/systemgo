@@ -9,9 +9,8 @@ import (
 
 type transaction struct {
 	// TODO rename as unmerged
-	jobs   map[*Unit]prospectiveJobs
-	merged map[*Unit]*job
-
+	jobs     map[*Unit]prospectiveJobs
+	merged   map[*Unit]*job
 	anchored map[*job]bool
 }
 
@@ -20,8 +19,8 @@ type prospectiveJobs [JOB_TYPE_COUNT]*job
 func newTransaction() (tr *transaction) {
 	return &transaction{
 		jobs:     map[*Unit]prospectiveJobs{},
-		anchored: map[*job]bool{},
 		merged:   set{},
+		anchored: map[*job]bool{},
 	}
 }
 
@@ -36,7 +35,13 @@ func (tr *transaction) Run() (err error) {
 	}
 
 	for _, j := range ordering {
-		go j.Run()
+		go func() {
+			if err := j.Run(); err != nil {
+				j.state = errored
+			} else {
+				j.state = success
+			}
+		}()
 	}
 }
 
@@ -54,9 +59,9 @@ func (tr *transaction) merge() (err error) {
 						}
 
 						switch {
-						case j.anchored && other.anchored:
+						case tr.anchored[j] && tr.anchored[other]:
 							return ErrDepConflict
-						case !j.anchored && !other.anchored:
+						case !tr.anchored[j] && !tr.anchored[other]:
 							// If there is an orphaned stop job - remove it
 							// See https://goo.gl/z8SSDy
 							switch {
@@ -67,9 +72,9 @@ func (tr *transaction) merge() (err error) {
 							default:
 								tr.delete(j)
 							}
-						case j.anchored:
+						case tr.anchored[j]:
 							tr.delete(other)
-						case other.anchored:
+						case tr.anchored[other]:
 							tr.delete(j)
 						}
 
@@ -191,44 +196,51 @@ func (tr *transaction) add(typ jobType, u *Unit, parent *job, matters, conflicts
 	//	if !u.CanStart() {}
 	//}
 
+	var j *job
 	if j = tr.jobs[u][typ]; j == nil {
 		j = newJob(typ, u)
 		jobs[u][typ] = j
 		isNew = true
 	}
 
-	switch {
-	case conflicts:
-		parent.conflicts.Put(j)
-		j.conflictedBy.Put(parent)
-	case matters:
-		parent.requires.Put(j)
-		j.requiredBy.Put(parent)
-	default:
-		parent.wants.Put(j)
-		j.wantedBy.Put(parent)
+	if parent == nil {
+		tr.anchored[j] = true
+	} else {
+		tr.anchored[j] = parent.anchored
+
+		switch {
+		case conflicts:
+			parent.conflicts.Put(j)
+			j.conflictedBy.Put(parent)
+		case matters:
+			parent.requires.Put(j)
+			j.requiredBy.Put(parent)
+		default:
+			parent.wants.Put(j)
+			j.wantedBy.Put(parent)
+		}
 	}
 
 	if isNew {
 		for _, name := range u.Conflicts() {
 			dep, err := u.System.Get(name)
 			if err != nil {
-				return
+				return err
 			}
 
 			if err = tr.add(stop, dep, j, true, true); err != nil {
-				return
+				return err
 			}
 		}
 
 		for _, name := range u.Requires() {
 			dep, err := u.System.Get(name)
 			if err != nil {
-				return
+				return err
 			}
 
 			if err = tr.add(start, dep, j, true, false); err != nil {
-				return
+				return err
 			}
 		}
 
@@ -241,6 +253,8 @@ func (tr *transaction) add(typ jobType, u *Unit, parent *job, matters, conflicts
 			tr.add(start, dep, j, false, false)
 		}
 	}
+
+	return nil
 }
 
 type graph struct {

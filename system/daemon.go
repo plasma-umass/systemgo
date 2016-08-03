@@ -50,9 +50,7 @@ func New() (sys *Daemon) {
 		}
 	}()
 	return &Daemon{
-		active: make(map[*Unit]bool),
-		loaded: make(map[*Unit]bool),
-		units:  make(map[string]*Unit),
+		units: make(map[string]*Unit),
 
 		since: time.Now(),
 		Log:   NewLog(),
@@ -179,7 +177,7 @@ func (sys *Daemon) Supervise(name string, uInt unit.Interface) (u *Unit, err err
 	u.system = sys
 
 	sys.units[name] = u
-
+	jobState
 	log.WithFields(log.Fields{
 		"unit": name,
 	}).Debugf("Created new *Unit")

@@ -3,21 +3,36 @@ package system
 import (
 	"errors"
 	"fmt"
+	//log "github.com/Sirupsen/logrus"
 )
 
 var ErrUnmergeable = errors.New("Unmergeable job types")
 
 type job struct {
-	typ      jobType
-	unit     *Unit
-	anchored bool
+	typ  jobType
+	unit *Unit
 
 	wants, requires, conflicts         set
 	wantedBy, requiredBy, conflictedBy set
 	after, before                      set
+
+	executed bool
+
+	waitch chan struct{}
+	err    error
 }
 
 const JOB_TYPE_COUNT = 4
+
+type jobState int
+
+//go:generate stringer -type=jobState job.go
+const (
+	waiting jobState = iota
+	running
+	success
+	errored
+)
 
 type jobType int
 
@@ -40,70 +55,66 @@ func (j *job) String() string {
 	return fmt.Sprintf("%s job for %s", j.typ, j.unit.Name())
 }
 
-type set map[*job]struct{}
-
-func (s set) Contains(j *job) (ok bool) {
-	_, ok = s[j]
-	return
-}
-
-func (s set) Put(j *job) {
-	s[j] = struct{}{}
-}
-
-func (s set) Remove(j *job) {
-	delete(s, j)
+func (u *Unit) Wait() {
+	u.loading.Wait()
 }
 
 type Runner interface {
 	Run() error
 }
 
+func (j *job) IsRunning() (running bool) {
+	return j.loadch != nil
+}
+
+func (j *job) Wait() (finished bool) {
+	if j.IsRunning() {
+		<-j.loadch
+	}
+	return true
+}
+
 func (j *job) Run() (err error) {
+	j.loadch = make(chan struct{})
+
+	j.unit.job = j
+
 	switch j.typ {
 	case start:
-		return j.unit.Start()
+		err = j.unit.start()
 	case stop:
-		return j.unit.Stop()
+		err = j.unit.stop()
 	case restart:
-		if err = j.unit.Stop(); err != nil {
+		if err = j.unit.stop(); err != nil {
 			return
 		}
-		return j.unit.Start()
+		err = j.unit.start()
 	case reload:
-		return j.unit.Reload()
-	}
-}
-
-var mergeTable = map[jobType]map[jobType]jobType{
-	start: {
-		start: start,
-		//verify_active: start,
-		reload:  reload, //reload_or_start
-		restart: restart,
-	},
-	reload: {
-		start: reload, //reload_or_start
-		//verify_active: reload,
-		restart: restart,
-	},
-	restart: {
-		start: restart,
-		//verify_active: restart,
-		reload: restart,
-	},
-}
-
-func (j *job) mergeWith(other *job) (err error) {
-	if j.typ == other.typ {
-		return
+		err = j.unit.reload()
+	default:
+		panic(ErrUnknownType)
 	}
 
-	var t jobType
-	if t, ok = mergeTable[j.typ][other.typ]; !ok {
-		return ErrUnmergeable
-	}
+	j.err = err
 
-	j.typ = t
+	j.executed = true
+	j.unit.job = nil
+
+	close(j.loadch)
+	j.loadch = nil
+
 	return
+}
+
+func (j *job) State() (st jobState) {
+	switch {
+	case j.IsRunning():
+		return running
+	case j.err != nil:
+		return errored
+	case j.err == nil && j.executed:
+		return success
+	default:
+		return waiting
+	}
 }
