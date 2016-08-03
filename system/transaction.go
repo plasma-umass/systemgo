@@ -8,8 +8,10 @@ import (
 )
 
 type transaction struct {
+	// TODO rename as unmerged
 	jobs     map[*Unit]prospectiveJobs
 	anchored map[*job]bool
+	merged   set
 }
 
 type prospectiveJobs [JOB_TYPE_COUNT]*job
@@ -18,6 +20,7 @@ func newTransaction() (tr *transaction) {
 	return &transaction{
 		jobs:     map[*Unit]prospectiveJobs{},
 		anchored: map[*job]bool{},
+		merged:   set{},
 	}
 }
 
@@ -34,30 +37,117 @@ func (tr *transaction) Run() (err error) {
 
 func (tr *transaction) ordering() (ordering []*job) {
 	jobs := set{}
-	unmerged := map[*Unit]*prospectiveJobs{}
 
-	for u, prospective := range tr.jobs {
-		unmerged[u] = prospective
-	}
+	// Do not stop until everything is merged
+	for len(tr.jobs) > 0 {
+		for u, prospective := range tr.jobs {
+			var j *job
 
-	for len(unmerged) > 0 {
-		for u, prospective := range unmerged {
-			merged, err := prospective.merge()
-			if err != nil {
-				// TODO: try to fix
-				//
-				// for _, j := range prospective
-				// if !j.anchored
-				// delete j
-				//
-				delete(unmerged, u)
-				continue
+			if j, err = prospective.merge(); err != nil {
+				for _, j := range prospective {
+					for _, other := range prospective {
+						if j == other || canMerge(j.typ, other.typ) {
+							continue
+						}
+
+						switch {
+						case j.anchored && other.anchored:
+							return ErrDepConflict
+						case !j.anchored && !other.anchored:
+							// If there is an orphaned stop job - remove it
+							// See https://goo.gl/z8SSDy
+							switch {
+							case j.typ == stop && len(j.conflictedBy) == 0:
+								tr.delete(j)
+							case other.typ == stop && len(other.conflictedBy) == 0:
+								tr.delete(other)
+							default:
+								tr.delete(j)
+							}
+						case j.anchored:
+							tr.delete(other)
+						case other.anchored:
+							tr.delete(j)
+						}
+
+					}
+				}
+				break
 			}
 
-			delete(unmerged, u)
-			jobs.Put(merged)
+			tr.merged.Put(j)
+			delete(tr.jobs, u)
 		}
 	}
+
+	return nil
+}
+
+func (j *job) isOrphan() bool {
+	return 0 == len(j.wantedBy) == len(j.requiredBy) == len(j.conflictedBy)
+}
+
+// deletes j from transaction
+// removes all references to j
+// recurses on orphaned and broken jobs
+func (tr *transaction) delete(j *job) {
+	tr.jobs[j.unit][j.typ] = nil
+
+	delete(tr.anchored, j)
+	delete(tr.merged, j)
+
+	for deps, f := range map[set]func(*job){
+		j.wantedBy: func(depender *job) {
+			delete(depender.wants, j)
+		},
+		j.requiredBy: func(depender *job) {
+			delete(depender.requires, j)
+			defer tr.delete(depender)
+		},
+		j.conflictedBy: func(depender *job) {
+			delete(depender.conflicts, j)
+			defer tr.delete(depender)
+		},
+
+		j.wants: func(dependency *job) {
+			delete(dependency.wantedBy, j)
+			if dependency.isOrphan() {
+				defer tr.delete(dependency)
+			}
+		},
+		j.requires: func(dependency *job) {
+			delete(dependency.requiredBy, j)
+			if dependency.isOrphan() {
+				defer tr.delete(dependency)
+			}
+		},
+		j.conflicts: func(dependency *job) {
+			delete(dependency.conflictedBy, j)
+			if dependency.isOrphan() {
+				defer tr.delete(dependency)
+			}
+		},
+	} {
+		for dep := range deps {
+			f(dep)
+		}
+	}
+}
+
+type mergeError struct {
+	what, with *job
+}
+
+func newMergeErr(what, with *job) (me *mergeError) {
+	return &mergeError{
+		what: what,
+		with: with,
+	}
+}
+
+func canMerge(what, with jobType) (ok bool) {
+	_, ok = mergeTable[what][with]
+	return
 }
 
 func (prospective prospectiveJobs) merge() (merged *job, err error) {
@@ -72,20 +162,22 @@ func (prospective prospectiveJobs) merge() (merged *job, err error) {
 		}
 
 		var t jobType
-		if t, ok = mergeTable[j.typ][other.typ]; !ok {
-			return ErrUnmergeable
+		if t, ok = mergeTable[merged.typ][j.typ]; !ok {
+			return nil, newMergeErr(merged, j)
 		}
 
 		merged.typ = t
 	}
 
-	return
+	return merged, nil
 }
 
+// recursively adds jobs to transaction
+// tries to load dependencies not already present
 func (tr *transaction) add(typ jobType, u *Unit, parent *job, matters, conflicts bool) (err error) {
 
 	// TODO: decide if these checks are really necessary to do here,
-	// as they are performed exactly before a unit is started, reloaded etc.
+	// as they are performed by the unit method calls already
 	//
 	//switch typ {
 	//case reload:

@@ -260,8 +260,8 @@ func (sys *Daemon) Start(names ...string) (err error) {
 			return
 		}
 		if err = tr.add(start, dep, nil, true, false); err != nil {
-		// TODO: start everything that is possible to start
-		return
+			// TODO: start everything that is possible to start
+			return
 		}
 	}
 
@@ -439,13 +439,13 @@ func (j *jobs) Failed() int {
 	return j.failed
 }
 
-func newJobs() (jobs Jobs) {
-	return jobs{
+func newJobs() (jobs *jobs) {
+	return &jobs{
 		ch: make(chan *job),
 	}
 }
 
-func (jobs *jobs) Assign(j Job) {
+func (jobs *jobs) Assign(j *job) {
 	jobs.Lock()
 	log.WithField("func", "Assign").Debugf("locked")
 

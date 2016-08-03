@@ -8,8 +8,9 @@ import (
 var ErrUnmergeable = errors.New("Unmergeable job types")
 
 type job struct {
-	typ  jobType
-	unit *Unit
+	typ      jobType
+	unit     *Unit
+	anchored bool
 
 	wants, requires, conflicts         set
 	wantedBy, requiredBy, conflictedBy set
@@ -17,6 +18,8 @@ type job struct {
 }
 
 const JOB_TYPE_COUNT = 4
+
+type jobType int
 
 //go:generate stringer -type=jobType job.go
 const (
