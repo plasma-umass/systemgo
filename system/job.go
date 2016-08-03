@@ -3,6 +3,9 @@ package system
 import (
 	"errors"
 	"fmt"
+	"sync"
+
+	"github.com/apex/log"
 	//log "github.com/Sirupsen/logrus"
 )
 
@@ -31,7 +34,7 @@ const (
 	waiting jobState = iota
 	running
 	success
-	errored
+	failed
 )
 
 type jobType int
@@ -55,30 +58,61 @@ func (j *job) String() string {
 	return fmt.Sprintf("%s job for %s", j.typ, j.unit.Name())
 }
 
-func (u *Unit) Wait() {
-	u.loading.Wait()
-}
-
 type Runner interface {
 	Run() error
 }
 
-func (j *job) IsRunning() (running bool) {
-	return j.loadch != nil
+func (j *job) IsRunning() bool {
+	return j.waitch != nil
+}
+
+func (j *job) Success() bool {
+	return j.State() == success
+}
+
+func (j *job) Failed() bool {
+	return j.State() == failed
 }
 
 func (j *job) Wait() (finished bool) {
 	if j.IsRunning() {
-		<-j.loadch
+		<-j.waitch
 	}
 	return true
 }
 
 func (j *job) Run() (err error) {
-	j.loadch = make(chan struct{})
+	j.waitch = make(chan struct{})
 
 	j.unit.job = j
 
+	wg := &sync.WaitGroup{}
+	for dep := range j.requires {
+		wg.Add(1)
+		go func(dep *job) {
+			defer wg.Done()
+			log.Debugf("%v waiting for %v", j, dep)
+			dep.Wait()
+			if !dep.Success() {
+				j.unit.Log.Printf("%v failed", j)
+				err = ErrDepFail
+			}
+		}(dep)
+	}
+
+	wg.Wait()
+
+	j.err = j.execute()
+
+	j.unit.job = nil
+
+	close(j.waitch)
+	j.waitch = nil
+
+	return
+}
+
+func (j *job) execute() (err error) {
 	switch j.typ {
 	case start:
 		err = j.unit.start()
@@ -86,7 +120,7 @@ func (j *job) Run() (err error) {
 		err = j.unit.stop()
 	case restart:
 		if err = j.unit.stop(); err != nil {
-			return
+			break
 		}
 		err = j.unit.start()
 	case reload:
@@ -94,14 +128,7 @@ func (j *job) Run() (err error) {
 	default:
 		panic(ErrUnknownType)
 	}
-
-	j.err = err
-
 	j.executed = true
-	j.unit.job = nil
-
-	close(j.loadch)
-	j.loadch = nil
 
 	return
 }
@@ -110,11 +137,11 @@ func (j *job) State() (st jobState) {
 	switch {
 	case j.IsRunning():
 		return running
-	case j.err != nil:
-		return errored
-	case j.err == nil && j.executed:
+	case !j.executed:
+		return waiting
+	case j.err == nil:
 		return success
 	default:
-		return waiting
+		return failed
 	}
 }

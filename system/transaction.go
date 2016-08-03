@@ -14,12 +14,12 @@ type transaction struct {
 	anchored map[*job]bool
 }
 
-type prospectiveJobs [JOB_TYPE_COUNT]*job
+type prospectiveJobs []*job
 
 func newTransaction() (tr *transaction) {
 	return &transaction{
 		jobs:     map[*Unit]prospectiveJobs{},
-		merged:   set{},
+		merged:   map[*Unit]*job{},
 		anchored: map[*job]bool{},
 	}
 }
@@ -35,14 +35,9 @@ func (tr *transaction) Run() (err error) {
 	}
 
 	for _, j := range ordering {
-		go func() {
-			if err := j.Run(); err != nil {
-				j.state = errored
-			} else {
-				j.state = success
-			}
-		}()
+		go j.Run()
 	}
+	return
 }
 
 func (tr *transaction) merge() (err error) {
@@ -83,7 +78,7 @@ func (tr *transaction) merge() (err error) {
 				break
 			}
 
-			tr.merged.Put(j)
+			tr.merged[u] = j
 			delete(tr.jobs, u)
 		}
 	}
@@ -92,7 +87,7 @@ func (tr *transaction) merge() (err error) {
 }
 
 func (j *job) isOrphan() bool {
-	return 0 == len(j.wantedBy) == len(j.requiredBy) == len(j.conflictedBy)
+	return len(j.wantedBy) == 0 && len(j.requiredBy) == 0 && len(j.conflictedBy) == 0
 }
 
 // deletes j from transaction
@@ -102,54 +97,43 @@ func (tr *transaction) delete(j *job) {
 	tr.jobs[j.unit][j.typ] = nil
 
 	delete(tr.anchored, j)
-	delete(tr.merged, j)
+	delete(tr.merged, j.unit)
 
-	for deps, f := range map[set]func(*job){
-		j.wantedBy: func(depender *job) {
+	for deps, f := range map[*set]func(*job){
+		&j.wantedBy: func(depender *job) {
 			delete(depender.wants, j)
 		},
-		j.requiredBy: func(depender *job) {
+		&j.requiredBy: func(depender *job) {
 			delete(depender.requires, j)
 			defer tr.delete(depender)
 		},
-		j.conflictedBy: func(depender *job) {
+		&j.conflictedBy: func(depender *job) {
 			delete(depender.conflicts, j)
 			defer tr.delete(depender)
 		},
 
-		j.wants: func(dependency *job) {
+		&j.wants: func(dependency *job) {
 			delete(dependency.wantedBy, j)
 			if dependency.isOrphan() {
 				defer tr.delete(dependency)
 			}
 		},
-		j.requires: func(dependency *job) {
+		&j.requires: func(dependency *job) {
 			delete(dependency.requiredBy, j)
 			if dependency.isOrphan() {
 				defer tr.delete(dependency)
 			}
 		},
-		j.conflicts: func(dependency *job) {
+		&j.conflicts: func(dependency *job) {
 			delete(dependency.conflictedBy, j)
 			if dependency.isOrphan() {
 				defer tr.delete(dependency)
 			}
 		},
 	} {
-		for dep := range deps {
+		for dep := range *deps {
 			f(dep)
 		}
-	}
-}
-
-type mergeError struct {
-	what, with *job
-}
-
-func newMergeErr(what, with *job) (me *mergeError) {
-	return &mergeError{
-		what: what,
-		with: with,
 	}
 }
 
@@ -199,7 +183,10 @@ func (tr *transaction) add(typ jobType, u *Unit, parent *job, matters, conflicts
 	var j *job
 	if j = tr.jobs[u][typ]; j == nil {
 		j = newJob(typ, u)
+
+		jobs[u] = make(prospectiveJobs, JOB_TYPE_COUNT)
 		jobs[u][typ] = j
+
 		isNew = true
 	}
 
@@ -346,3 +333,5 @@ func (g *graph) order(j *job) (err error) {
 
 	return nil
 }
+
+var mergeTable = map[jobType]jobType{}

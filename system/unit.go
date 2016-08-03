@@ -16,8 +16,6 @@ var ErrIsStarting = errors.New("Unit is already starting")
 type Unit struct {
 	unit.Interface
 
-	loading
-
 	name string
 	path string
 
@@ -146,6 +144,10 @@ func (u *Unit) IsReloader() (ok bool) {
 }
 
 func (u *Unit) Reload() (err error) {
+	// TODO reload transaction
+}
+
+func (u *Unit) reload() (err error) {
 	reloader, ok := u.Interface.(unit.Reloader)
 	if !ok {
 		return ErrNoReload
@@ -154,40 +156,14 @@ func (u *Unit) Reload() (err error) {
 }
 
 func (u *Unit) start() (err error) {
-	log.Debugf("start called on %p", u)
-
-	u.mutex.Lock()
-	defer u.mutex.Unlock()
+	log.Debugf("start called on %v", u)
 
 	if !u.IsLoaded() {
 		return ErrNotLoaded
-	} else if u.IsStarting() {
-		return ErrIsStarting
 	}
 
 	u.Log.Println("Starting...")
 
-	wg := &sync.WaitGroup{}
-	for _, name := range u.Requires() {
-		var dep *Unit
-		if dep, err = u.system.Get(name); err != nil {
-			u.Log.Printf("Failed to load dependency %s: %s", name, err)
-			return ErrDepFail
-		}
-		wg.Add(1)
-		go func(name string, dep *Unit) {
-			defer wg.Done()
-			log.Debugf("%p waiting for %p(%s)", u, dep, name)
-			dep.Wait()
-			log.Debugf("%p finished waiting for %p(%s)", u, dep, name)
-			if !dep.IsActive() {
-				u.Log.Printf("Dependency %s failed to start", name)
-				err = ErrDepFail
-			}
-		}(name, dep)
-	}
-
-	wg.Wait()
 	log.Debugf("All dependencies of %p finished loading", u)
 	if err != nil {
 		return err
@@ -209,12 +185,9 @@ func (u *Unit) Start() (err error) {
 	return t.Run()
 }
 
-func (u *Unit) Stop() (err error) {
+func (u *Unit) stop() (err error) {
 	u.mutex.Lock()
 	defer u.mutex.Unlock()
-
-	u.loading.Start()
-	defer u.loading.Stop()
 
 	if !u.IsLoaded() {
 		return ErrNotLoaded

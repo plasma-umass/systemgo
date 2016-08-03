@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/b1101/systemgo/unit"
@@ -36,13 +37,11 @@ type Daemon struct {
 	// System log
 	Log *Log
 
-	Jobs jobs
+	mutex sync.Mutex
 }
 
 func New() (sys *Daemon) {
 	defer func() {
-		go sys.dispatchJobs()
-
 		if debug {
 			sys.Log.Logger.Hooks.Add(&errorHook{
 				Source: "system",
@@ -55,11 +54,6 @@ func New() (sys *Daemon) {
 		since: time.Now(),
 		Log:   NewLog(),
 		paths: DEFAULT_PATHS,
-
-		Jobs: Jobs{
-			units:    make(chan *Unit),
-			assigned: map[*Unit]job{},
-		},
 	}
 }
 
@@ -153,6 +147,24 @@ func (sys *Daemon) StatusOf(name string) (st unit.Status, err error) {
 	return
 }
 
+func (sys *Daemon) failedCount() (n int) {
+	for _, u := range sys.units {
+		if j := u.job; j != nil && j.Failed() {
+			n++
+		}
+	}
+	return
+}
+
+func (sys *Daemon) jobCount() (n int) {
+	for _, u := range sys.units {
+		if u.job != nil {
+			n++
+		}
+	}
+	return
+}
+
 //func (sys Daemon) WriteStatus(output io.Writer, names ...string) (err error) {
 //if len(names) == 0 {
 //w := tabwriter.Writer
@@ -168,16 +180,22 @@ func (sys *Daemon) StatusOf(name string) (st unit.Status, err error) {
 //return
 //}
 
-func (sys *Daemon) Supervise(name string, uInt unit.Interface) (u *Unit, err error) {
+//func (sys *Daemon) newUnit(v unit.Interface) (u *Unit) {
+//	u = NewUnit(v)
+//	sys.Supervise(u)
+//}
+
+func (sys *Daemon) Supervise(name string, v unit.Interface) (u *Unit, err error) {
 	if _, exists := sys.units[name]; exists {
 		return nil, ErrExists
 	}
-	u = NewUnit(uInt)
-	u.name = name
-	u.system = sys
 
+	u = NewUnit(v)
+	u.System = sys
+
+	u.name = name
 	sys.units[name] = u
-	jobState
+
 	log.WithFields(log.Fields{
 		"unit": name,
 	}).Debugf("Created new *Unit")
@@ -205,108 +223,77 @@ func (sys *Daemon) Get(name string) (u *Unit, err error) {
 	return
 }
 
-func (sys *Daemon) Restart(u *Unit) (err error) {
-	if !u.IsActive() {
-		return ErrNotActive
+func (sys *Daemon) getAndExecute(names []string, fn func(*Unit) error) (err error) {
+	for _, name := range names {
+		var u *Unit
+		if u, err = sys.Get(name); err != nil {
+			return
+		}
+
+		if err = fn(u); err != nil {
+			return
+		}
 	}
-	sys.Jobs.Assign(u, restart)
 	return
 }
 
 // TODO
-func (sys *Daemon) Enable(name string) (err error) {
-	var u *Unit
-	if u, err = sys.Get(name); err != nil {
-		return
-	}
-	//u.Interface.WantedBy()
+func (sys *Daemon) Enable(names ...string) (err error) {
 	return ErrNotImplemented
 }
 
 // TODO
-func (sys *Daemon) Disable(name string) (err error) {
-	var u *Unit
-	if u, err = sys.Get(name); err != nil {
-		return
-	}
-	//u.Interface.WantedBy()
+func (sys *Daemon) Disable(names ...string) (err error) {
 	return ErrNotImplemented
 }
 
-func (sys *Daemon) Stop(names ...string) (err error) {
-	log.Debugf("sys.Stop name: %s", name)
+// TODO: isolate, check redundant jobs, fail fast
 
-	var u *Unit
-	if u, err = sys.Get(name); err != nil {
+func (sys *Daemon) Stop(names ...string) (err error) {
+	var tr *transaction
+	if tr, err = sys.newTransaction(stop, names); err != nil {
 		return
 	}
-
-	if !u.IsActive() {
-		return ErrNotActive
-	}
-	return u.Stop()
+	return tr.Run()
 }
 
-// job.Run()
-
 func (sys *Daemon) Start(names ...string) (err error) {
-	tr := newTransaction()
+	var tr *transaction
+	if tr, err = sys.newTransaction(start, names); err != nil {
+		return
+	}
+	return tr.Run()
+}
+
+func (sys *Daemon) Restart(names ...string) (err error) {
+	var tr *transaction
+	if tr, err = sys.newTransaction(restart, names); err != nil {
+		return
+	}
+	return tr.Run()
+}
+
+func (sys *Daemon) newTransaction(t jobType, names []string) (tr *transaction, err error) {
+	sys.mutex.Lock()
+	defer sys.mutex.Unlock()
+
+	tr = newTransaction()
 
 	for _, name := range names {
 		var dep *Unit
 		if dep, err = sys.Get(name); err != nil {
-			return
+			return nil, err
 		}
-		if err = tr.add(start, dep, nil, true, false); err != nil {
-			// TODO: start everything that is possible to start
-			return
+
+		if err = tr.add(t, dep, nil, true, false); err != nil {
+			return nil, err
 		}
 	}
-
-	return tr.Run()
+	return
 }
 
-//var deps map[string]*Unit
-//if deps, err = sys.loadDeps(units); err != nil {
-//return
-//}
-//log.Debugf("sys.loadDeps returned:\n%+v, nil", units)
-
-//var ordering []*Unit
-//if ordering, err = sys.order(deps); err != nil {
-//return
-//}
-//log.Debugf("sys.order returned:\n%+v, nil", ordering)
-
-//for _, u := range ordering {
-//wg := &sync.WaitGroup{}
-//for _, name := range u.Conflicts() {
-//log.Debugf("%p conflicts with %s", u, name)
-//wg.Add(1)
-//go func(name string) {
-//if u, err = sys.Get(name); err != nil {
-//return
-//}
-//if err = sys.Stop(u); err != nil {
-//u.Log.Printf("Error stopping %s: %s", name, err)
-//}
-//wg.Done()
-//}(name)
-
-//}
-//wg.Wait()
-//if err != nil {
-//return ErrDepConflict
-//}
-
-//sys.Jobs.Assign(u, start)
-//}
-
-//return
-//}
-
-// Load searches for a definition of unit name in configured paths parses it and returns a pointer to Unit
-// If a unit name has already been parsed(tried to load) by sys, it will not create a new unit, but return a pointer to already created unit instead
+// Load searches for name in configured paths, parses it, and either overwrites the definition of already
+// created Unit or creates a new one
 func (sys *Daemon) Load(name string) (u *Unit, err error) {
 	log.WithField("name", name).Debugln("Load")
 
@@ -383,9 +370,7 @@ func (sys *Daemon) parse(name string) (u *Unit, err error) {
 	var v unit.Interface
 	switch filepath.Ext(name) {
 	case ".target":
-		v = &target.Unit{Get: func(name string) (unit.Subber, error) {
-			return sys.Get(name)
-		}}
+		v = &target.Unit{}
 	case ".service":
 		v = &service.Unit{}
 	default:
@@ -423,89 +408,4 @@ func pathset(path string) (definitions []string, err error) {
 	}
 
 	return
-}
-
-type jobs struct {
-	n, failed int
-	ch        chan *job
-}
-
-func (j *jobs) Count() int {
-	return j.n
-}
-func (j *jobs) Failed() int {
-	return j.failed
-}
-
-func newJobs() (jobs *jobs) {
-	return &jobs{
-		ch: make(chan *job),
-	}
-}
-
-func (jobs *jobs) Assign(j *job) {
-	jobs.Lock()
-	log.WithField("func", "Assign").Debugf("locked")
-
-	assigned, has := jobs.assigned[u]
-	if !has {
-		log.Debugf("Assigned a new job(%s) for %s", j, u.name)
-		jobs.assigned[u] = j
-
-		jobs.Unlock()
-		log.WithField("func", "Assign").Debugf("unlocked")
-
-		jobs.units <- u
-		return
-	}
-
-	defer jobs.Unlock()
-
-	switch {
-	case assigned == stop && j == start:
-		log.Debugf("A job for %s has already been assigned", u.name)
-		jobs.assigned[u] = restart
-
-	case assigned == start && j == stop:
-		delete(jobs.assigned, u)
-
-	default:
-		jobs.assigned[u] = j
-	}
-}
-
-func (sys *Daemon) dispatchJobs() {
-	for j := range sys.Jobs.ch {
-		sys.Jobs.Lock()
-		log.WithField("func", "dispatchJobs").Debugf("locked")
-		if j, has := sys.Jobs.assigned[u]; has {
-			go j.
-				delete(sys.Jobs.assigned, u)
-		}
-		sys.Jobs.Unlock()
-		log.WithField("func", "dispatchJobs").Debugf("unlocked")
-	}
-}
-
-func (sys *Daemon) dispatch(u *Unit, j job) (err error) {
-	defer func() {
-		if err != nil {
-			log.WithField("unit", u.name).Debugf("Job failed to execute")
-			sys.Jobs.failed[u] = true
-		}
-	}()
-	log.WithField("unit", u.name).Debugf("Dispatching a new %s job", j)
-	switch j {
-	case start:
-		return u.Start()
-	case stop:
-		return sys.Stop(u)
-	case restart:
-		if err = sys.dispatch(u, stop); err == nil {
-			err = sys.dispatch(u, start)
-		}
-		return
-	default:
-		panic("Unknown job type")
-	}
 }

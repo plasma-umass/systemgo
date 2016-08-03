@@ -11,16 +11,7 @@ import (
 // it in the unit package
 type Unit struct {
 	unit.Definition
-
-	// Used to get target dependencies
-	//sys system.Getter
 }
-
-//func NewTarget(sys system.Getter) (targ *Unit) {
-//return &Unit{
-//sys: sys,
-//}
-//}
 
 // Define attempts to fill the targ definition by parsing r
 func (targ *Unit) Define(r io.Reader) (err error) {
