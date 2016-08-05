@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/b1101/systemgo/system"
+	"github.com/rvolosatovs/systemgo/system"
 )
 
 // System communication client using HTTP protocol

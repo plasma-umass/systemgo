@@ -1,6 +1,6 @@
 package systemctl
 
-import "github.com/b1101/systemgo/system"
+import "github.com/rvolosatovs/systemgo/system"
 
 type Handler func(...string) []Response
 

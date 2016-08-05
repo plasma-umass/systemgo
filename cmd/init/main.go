@@ -1,6 +1,6 @@
 package main
 
-import . "github.com/b1101/systemgo/init"
+import . "github.com/rvolosatovs/systemgo/init"
 
 func main() {
 	Boot()

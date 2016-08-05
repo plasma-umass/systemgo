@@ -3,7 +3,7 @@ package system
 import (
 	"fmt"
 
-	"github.com/b1101/systemgo/unit"
+	"github.com/rvolosatovs/systemgo/unit"
 )
 
 // Supervisable represents anything that can be supervised by an instance of a system.Interface

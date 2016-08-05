@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/b1101/systemgo/unit"
-	"github.com/b1101/systemgo/unit/service"
-	"github.com/b1101/systemgo/unit/target"
+	"github.com/rvolosatovs/systemgo/unit"
+	"github.com/rvolosatovs/systemgo/unit/service"
+	"github.com/rvolosatovs/systemgo/unit/target"
 
 	log "github.com/Sirupsen/logrus"
 )
