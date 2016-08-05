@@ -14,6 +14,7 @@ COVER_METHOD=atomic
 COVER_DEFAULT=html
 TRAVIS_MODE=travis-ci
 
+PKGS=`go list $(REPO)/... | grep -v "vendor"`
 
 PKG_SYSTEMGO=$(REPO)
 PKG_TEST=$(REPO)/$(TEST)
@@ -71,7 +72,7 @@ dependcoverall: dependcover
 
 vet: generate
 	@echo "Running 'go vet'..."
-	@go vet $(REPO)/...
+	@go vet $(PKGS)
 
 generate: depend
 	@echo "Running 'go generate'..."
@@ -100,7 +101,7 @@ $(MOCK_PKGS): mock_%: $(wildcard %/interfaces.go)
 
 test: dependtest mock 
 	@echo "Starting tests..."
-	@go test -v $(REPO)/...
+	@go test -v $(PKGS)
 
 cover: dependcover
 	@echo "Creating html coverage report..."
