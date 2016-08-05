@@ -1,4 +1,4 @@
-REPO=github.com/b1101/systemgo
+REPO=github.com/rvolosatovs/systemgo
 
 TEST=test
 UNIT=unit
@@ -131,5 +131,9 @@ cleancover:
 cleanmock:
 	@echo "Removing mock units..."
 	@-rm -rf `find $(ABS_REPO) -name 'mock_*'`
+
+fix:
+	@echo "rvolosatovs -> rvolosatovs"
+	@./fix-import.sh
 
 .PHONY: all generate test dependtest depend cover dependcover systemctl init install clean cleanbin cleanstringers cleancover cleanmock build travis mock_system mock_unit vet init cmd/init cmd/systemctl $(SYSTEMCTL)
