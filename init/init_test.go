@@ -111,7 +111,6 @@ func TestBoot(t *testing.T) {
 				continue
 			}
 
-			u.Wait()
 			fmt.Println(u.Status())
 			assert.Equal(t, unit.Active, u.Active(), fmt.Sprintf("%s - %s", c.name, u.Active()))
 		}

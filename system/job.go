@@ -5,8 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/apex/log"
-	//log "github.com/Sirupsen/logrus"
+	log "github.com/Sirupsen/logrus"
 )
 
 var ErrUnmergeable = errors.New("Unmergeable job types")
@@ -29,7 +28,7 @@ const JOB_TYPE_COUNT = 4
 
 type jobState int
 
-//go:generate stringer -type=jobState job.go
+//go:generate stringer -type=jobState
 const (
 	waiting jobState = iota
 	running
@@ -39,7 +38,7 @@ const (
 
 type jobType int
 
-//go:generate stringer -type=jobType job.go
+//go:generate stringer -type=jobType
 const (
 	start jobType = iota
 	stop
@@ -51,15 +50,22 @@ func newJob(typ jobType, u *Unit) (j *job) {
 	return &job{
 		typ:  typ,
 		unit: u,
+
+		requires:  set{},
+		wants:     set{},
+		conflicts: set{},
+
+		requiredBy:   set{},
+		wantedBy:     set{},
+		conflictedBy: set{},
+
+		after:  set{},
+		before: set{},
 	}
 }
 
 func (j *job) String() string {
 	return fmt.Sprintf("%s job for %s", j.typ, j.unit.Name())
-}
-
-type Runner interface {
-	Run() error
 }
 
 func (j *job) IsRunning() bool {
@@ -79,6 +85,23 @@ func (j *job) Wait() (finished bool) {
 		<-j.waitch
 	}
 	return true
+}
+
+func (j *job) isOrphan() bool {
+	return len(j.wantedBy) == 0 && len(j.requiredBy) == 0 && len(j.conflictedBy) == 0
+}
+
+func (j *job) State() (st jobState) {
+	switch {
+	case j.IsRunning():
+		return running
+	case !j.executed:
+		return waiting
+	case j.err == nil:
+		return success
+	default:
+		return failed
+	}
 }
 
 func (j *job) Run() (err error) {
@@ -113,6 +136,25 @@ func (j *job) Run() (err error) {
 }
 
 func (j *job) execute() (err error) {
+	wg := &sync.WaitGroup{}
+	for dep := range j.requires {
+		if !dep.Success() {
+			wg.Add(1)
+			go func() {
+				dep.Wait()
+				if !dep.Success() {
+					err = dep.err
+				}
+				wg.Done()
+			}()
+		}
+	}
+
+	wg.Wait()
+	if err != nil {
+		return
+	}
+
 	switch j.typ {
 	case start:
 		err = j.unit.start()
@@ -133,15 +175,46 @@ func (j *job) execute() (err error) {
 	return
 }
 
-func (j *job) State() (st jobState) {
-	switch {
-	case j.IsRunning():
-		return running
-	case !j.executed:
-		return waiting
-	case j.err == nil:
-		return success
-	default:
-		return failed
+var mergeTable = map[jobType]map[jobType]jobType{
+	start: {
+		start: start,
+		//verify_active: start,
+		reload:  reload, //reload_or_start
+		restart: restart,
+	},
+	reload: {
+		start: reload, //reload_or_start
+		//verify_active: reload,
+		restart: restart,
+	},
+	restart: {
+		start: restart,
+		//verify_active: restart,
+		reload: restart,
+	},
+}
+
+func (j *job) mergeWith(other *job) (err error) {
+	t, ok := mergeTable[j.typ][other.typ]
+	if !ok {
+		return ErrUnmergeable
 	}
+
+	j.typ = t
+
+	for jSet, oSet := range map[*set]*set{
+		&j.wantedBy:     &other.wantedBy,
+		&j.requiredBy:   &other.requiredBy,
+		&j.conflictedBy: &other.conflictedBy,
+
+		&j.wants:     &other.wants,
+		&j.requires:  &other.requires,
+		&j.conflicts: &other.conflicts,
+	} {
+		for oJob := range *oSet {
+			jSet.Put(oJob)
+		}
+	}
+
+	return
 }

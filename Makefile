@@ -40,7 +40,7 @@ ABS_SYSTEMCTL=$(ABS_REPO)/$(SYSTEMCTL)
 
 MOCK_PKGS=mock_unit mock_systemctl
 #system_interfaces=Supervisable,Dependency,Reloader
-unit_interfaces=Interface,Reloader
+unit_interfaces=Interface,Reloader,Starter,Stopper
 systemctl_interfaces=Daemon
 
 all: build test

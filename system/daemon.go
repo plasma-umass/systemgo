@@ -180,11 +180,6 @@ func (sys *Daemon) jobCount() (n int) {
 //return
 //}
 
-//func (sys *Daemon) newUnit(v unit.Interface) (u *Unit) {
-//	u = NewUnit(v)
-//	sys.Supervise(u)
-//}
-
 func (sys *Daemon) Supervise(name string, v unit.Interface) (u *Unit, err error) {
 	if _, exists := sys.units[name]; exists {
 		return nil, ErrExists
@@ -285,7 +280,7 @@ func (sys *Daemon) newTransaction(t jobType, names []string) (tr *transaction, e
 			return nil, err
 		}
 
-		if err = tr.add(t, dep, nil, true, false); err != nil {
+		if err = tr.add(t, dep, nil, true, true); err != nil {
 			return nil, err
 		}
 	}
@@ -295,7 +290,9 @@ func (sys *Daemon) newTransaction(t jobType, names []string) (tr *transaction, e
 // Load searches for name in configured paths, parses it, and either overwrites the definition of already
 // created Unit or creates a new one
 func (sys *Daemon) Load(name string) (u *Unit, err error) {
-	log.WithField("name", name).Debugln("Load")
+	log.WithFields(log.Fields{
+		"name": name,
+	}).Debugln("sys.Load called")
 
 	var parsed bool
 	u, parsed = sys.units[name]
@@ -341,18 +338,18 @@ func (sys *Daemon) Load(name string) (u *Unit, err error) {
 			err = ErrIsDir
 		}
 		if err != nil {
-			u.Log.Printf("%s", err)
+			u.Log.Errorf("%s", err)
 			return u, err
 		}
 
 		if err = u.Interface.Define(file); err != nil {
 			if me, ok := err.(unit.MultiError); ok {
-				u.Log.Printf("Definition is invalid:")
+				u.Log.Error("Definition is invalid:")
 				for _, errmsg := range me.Errors() {
-					u.Log.Printf(errmsg)
+					u.Log.Error(errmsg)
 				}
 			} else {
-				u.Log.Printf("Error parsing definition: %s", err)
+				u.Log.Errorf("Error parsing definition: %s", err)
 			}
 			u.loaded = unit.Error
 			return u, err

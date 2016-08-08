@@ -1,26 +1,24 @@
 package system
 
 import (
-	"errors"
 	"fmt"
 
 	log "github.com/Sirupsen/logrus"
 )
 
 type transaction struct {
-	// TODO rename as unmerged
-	jobs     map[*Unit]prospectiveJobs
+	unmerged map[*Unit]*prospectiveJobs
 	merged   map[*Unit]*job
-	anchored map[*job]bool
 }
 
-type prospectiveJobs []*job
+type prospectiveJobs struct {
+	anchored, optional [JOB_TYPE_COUNT]*job
+}
 
 func newTransaction() (tr *transaction) {
 	return &transaction{
-		jobs:     map[*Unit]prospectiveJobs{},
+		unmerged: map[*Unit]*prospectiveJobs{},
 		merged:   map[*Unit]*job{},
-		anchored: map[*job]bool{},
 	}
 }
 
@@ -40,63 +38,173 @@ func (tr *transaction) Run() (err error) {
 	return
 }
 
-func (tr *transaction) merge() (err error) {
-	// Do not stop until everything is merged
-	for len(tr.jobs) > 0 {
-		for u, prospective := range tr.jobs {
-			var j *job
+// recursively adds jobs to transaction
+// tries to load dependencies not already present
+func (tr *transaction) add(typ jobType, u *Unit, parent *job, required, anchor bool) (err error) {
 
-			if j, err = prospective.merge(); err != nil {
-				for _, j := range prospective {
-					for _, other := range prospective {
-						if j == other || canMerge(j.typ, other.typ) {
-							continue
-						}
+	log.WithField("func", "add").Debug(typ, u, parent, required, anchor)
+	// TODO: decide if these checks are necessary to do here,
+	// as they are performed by the unit method calls already
+	//
+	//switch typ {
+	//case reload:
+	//	if !u.IsReloader() {
+	//		return ErrNoReload
+	//	}
+	//case start:
+	//	if !u.CanStart() {}
+	//}
+	var j *job
+	var isNew bool
 
-						switch {
-						case tr.anchored[j] && tr.anchored[other]:
-							return ErrDepConflict
-						case !tr.anchored[j] && !tr.anchored[other]:
-							// If there is an orphaned stop job - remove it
-							// See https://goo.gl/z8SSDy
-							switch {
-							case j.typ == stop && len(j.conflictedBy) == 0:
-								tr.delete(j)
-							case other.typ == stop && len(other.conflictedBy) == 0:
-								tr.delete(other)
-							default:
-								tr.delete(j)
-							}
-						case tr.anchored[j]:
-							tr.delete(other)
-						case tr.anchored[other]:
-							tr.delete(j)
-						}
+	if tr.unmerged[u] == nil {
+		tr.unmerged[u] = &prospectiveJobs{}
+	}
 
-					}
-				}
-				break
+	if anchor {
+		if j = tr.unmerged[u].anchored[typ]; j == nil {
+			j = newJob(typ, u)
+			log.Debugf("Created %s", j)
+
+			tr.unmerged[u].anchored[typ] = j
+
+			isNew = true
+		}
+	} else {
+		if j = tr.unmerged[u].optional[typ]; j == nil {
+			j = newJob(typ, u)
+			log.Debugf("Created %s", j)
+
+			tr.unmerged[u].optional[typ] = j
+
+			isNew = true
+		}
+	}
+
+	if parent != nil {
+		if required {
+			parent.requires.Put(j)
+			j.requiredBy.Put(parent)
+		} else {
+			parent.wants.Put(j)
+			j.wantedBy.Put(parent)
+		}
+	}
+
+	if isNew {
+		for _, name := range u.Conflicts() {
+			dep, err := u.System.Get(name)
+			if err != nil {
+				return err
 			}
 
-			tr.merged[u] = j
-			delete(tr.jobs, u)
+			if err = tr.add(stop, dep, j, true, anchor); err != nil {
+				return err
+			}
+		}
+
+		for _, name := range u.Requires() {
+			dep, err := u.System.Get(name)
+			if err != nil {
+				return err
+			}
+
+			if err = tr.add(start, dep, j, true, anchor); err != nil {
+				return err
+			}
+		}
+
+		for _, name := range u.Wants() {
+			dep, err := u.System.Get(name)
+			if err != nil {
+				continue
+			}
+
+			tr.add(start, dep, j, false, false)
 		}
 	}
 
 	return nil
 }
 
-func (j *job) isOrphan() bool {
-	return len(j.wantedBy) == 0 && len(j.requiredBy) == 0 && len(j.conflictedBy) == 0
+func (tr *transaction) merge() (err error) {
+	for u, prospective := range tr.unmerged {
+		var merged *job
+
+		for _, j := range prospective.anchored {
+			if j == nil {
+				continue
+			}
+
+			if merged == nil {
+				merged = j
+			} else {
+				if err = merged.mergeWith(j); err != nil {
+					return
+				}
+			}
+		}
+
+		for _, j := range prospective.optional {
+			if j == nil {
+				continue
+			}
+
+			if merged == nil {
+				merged = j
+			} else {
+				if err = merged.mergeWith(j); err != nil {
+					// TODO be smart when deleting unmergeable jobs
+					tr.delete(j)
+				}
+			}
+
+			prospective.optional[j.typ] = nil
+		}
+
+		tr.merged[u] = merged
+		delete(tr.unmerged, u)
+	}
+
+	return nil
 }
+
+// TODO implement something along these lines
+//for _, j := range prospective {
+//	for _, other := range prospective {
+//		if j == other || canMerge(j.typ, other.typ) {
+//			continue
+//		}
+
+//		switch {
+//		case tr.anchored[j] && tr.anchored[other]:
+//			return ErrDepConflict
+//		case !tr.anchored[j] && !tr.anchored[other]:
+//			// If there is an orphaned stop job - remove it
+//			// See https://goo.gl/z8SSDy
+//			switch {
+//			case j.typ == stop && len(j.conflictedBy) == 0:
+//				tr.delete(j)
+//			case other.typ == stop && len(other.conflictedBy) == 0:
+//				tr.delete(other)
+//			default:
+//				tr.delete(j)
+//			}
+//		case tr.anchored[j]:
+//			tr.delete(other)
+//		case tr.anchored[other]:
+//			tr.delete(j)
+//		}
+
+//	}
+//}
+//break
+//}
 
 // deletes j from transaction
 // removes all references to j
 // recurses on orphaned and broken jobs
 func (tr *transaction) delete(j *job) {
-	tr.jobs[j.unit][j.typ] = nil
-
-	delete(tr.anchored, j)
 	delete(tr.merged, j.unit)
 
 	for deps, f := range map[*set]func(*job){
@@ -142,131 +250,14 @@ func canMerge(what, with jobType) (ok bool) {
 	return
 }
 
-func (prospective prospectiveJobs) merge() (merged *job, err error) {
-	for _, j := range prospective {
-		if j == nil {
-			continue
-		}
-
-		if merged == nil {
-			merged = j
-			continue
-		}
-
-		var t jobType
-		if t, ok = mergeTable[merged.typ][j.typ]; !ok {
-			return nil, newMergeErr(merged, j)
-		}
-
-		merged.typ = t
-	}
-
-	return merged, nil
-}
-
-// recursively adds jobs to transaction
-// tries to load dependencies not already present
-func (tr *transaction) add(typ jobType, u *Unit, parent *job, matters, conflicts bool) (err error) {
-
-	// TODO: decide if these checks are really necessary to do here,
-	// as they are performed by the unit method calls already
-	//
-	//switch typ {
-	//case reload:
-	//	if !u.IsReloader() {
-	//		return ErrNoReload
-	//	}
-	//case start:
-	//	if !u.CanStart() {}
-	//}
-
-	var j *job
-	if j = tr.jobs[u][typ]; j == nil {
-		j = newJob(typ, u)
-
-		jobs[u] = make(prospectiveJobs, JOB_TYPE_COUNT)
-		jobs[u][typ] = j
-
-		isNew = true
-	}
-
-	if parent == nil {
-		tr.anchored[j] = true
-	} else {
-		tr.anchored[j] = parent.anchored
-
-		switch {
-		case conflicts:
-			parent.conflicts.Put(j)
-			j.conflictedBy.Put(parent)
-		case matters:
-			parent.requires.Put(j)
-			j.requiredBy.Put(parent)
-		default:
-			parent.wants.Put(j)
-			j.wantedBy.Put(parent)
-		}
-	}
-
-	if isNew {
-		for _, name := range u.Conflicts() {
-			dep, err := u.System.Get(name)
-			if err != nil {
-				return err
-			}
-
-			if err = tr.add(stop, dep, j, true, true); err != nil {
-				return err
-			}
-		}
-
-		for _, name := range u.Requires() {
-			dep, err := u.System.Get(name)
-			if err != nil {
-				return err
-			}
-
-			if err = tr.add(start, dep, j, true, false); err != nil {
-				return err
-			}
-		}
-
-		for _, name := range u.Wants() {
-			dep, err := u.System.Get(name)
-			if err != nil {
-				continue
-			}
-
-			tr.add(start, dep, j, false, false)
-		}
-	}
-
-	return nil
-}
-
-type graph struct {
-	visited, ordered set
-	ordering         []*job
-}
-
-func newGraph(jobs set) (g *graph) {
-	return &graph{
-		visited:  set{},
-		ordered:  set{},
-		ordering: make([]*job, 0, len(jobs)),
-	}
-}
-
 func (tr *transaction) order() (ordering []*job, err error) {
-	log.Debugf("sys.order received jobs:\n%+v", jobs)
-
-	g := newGraph(jobs)
+	g := newGraph()
 
 	for u, j := range tr.merged {
 		log.Debugf("Checking after of %s...", j)
 		for _, depname := range u.After() {
 			var dep *Unit
-			if dep, err = u.system.Unit(depname); err != nil {
+			if dep, err = u.System.Unit(depname); err != nil {
 				continue
 			}
 
@@ -280,7 +271,7 @@ func (tr *transaction) order() (ordering []*job, err error) {
 		log.Debugf("Checking before of %s...", j)
 		for _, depname := range u.Before() {
 			var dep *Unit
-			if dep, err = u.system.Unit(depname); err != nil {
+			if dep, err = u.System.Unit(depname); err != nil {
 				continue
 			}
 
@@ -292,6 +283,8 @@ func (tr *transaction) order() (ordering []*job, err error) {
 		}
 	}
 
+	g.ordering = make([]*job, 0, len(tr.merged))
+
 	log.Debugf("starting DFS on graph:\n%+v", g)
 	for _, j := range tr.merged {
 		if err = g.order(j); err != nil {
@@ -301,37 +294,3 @@ func (tr *transaction) order() (ordering []*job, err error) {
 
 	return g.ordering, nil
 }
-
-var errBlank = errors.New("")
-
-func (g *graph) order(j *job) (err error) {
-	log.Debugf("order %s\ngraph: %s\n\n", j, g)
-	if g.ordered.Contains(j) {
-		return nil
-	}
-
-	if g.visited.Contains(j) {
-		return errBlank
-	}
-
-	g.visited.Put(j)
-
-	for depJob := range j.after {
-		if err = g.order(depJob); err != nil {
-			if err == errBlank {
-				return fmt.Errorf("%s\n", depJob)
-			}
-			return fmt.Errorf("%s\n%s depends on %s", j, j, err)
-		}
-	}
-
-	g.visited.Remove(j)
-
-	if !g.ordered.Contains(j) {
-		g.ordering = append(g.ordering, j)
-	}
-
-	return nil
-}
-
-var mergeTable = map[jobType]jobType{}

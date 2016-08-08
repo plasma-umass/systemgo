@@ -145,6 +145,7 @@ func (u *Unit) IsReloader() (ok bool) {
 
 func (u *Unit) Reload() (err error) {
 	// TODO reload transaction
+	return
 }
 
 func (u *Unit) reload() (err error) {
@@ -178,11 +179,11 @@ func (u *Unit) start() (err error) {
 }
 
 func (u *Unit) Start() (err error) {
-	t := newTransaction()
-	if err = t.add(start, u, nil, true, false); err != nil {
+	tr := newTransaction()
+	if err = tr.add(start, u, nil, true, true); err != nil {
 		return
 	}
-	return t.Run()
+	return tr.Run()
 }
 
 func (u *Unit) stop() (err error) {
