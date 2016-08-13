@@ -11,6 +11,25 @@ import (
 
 const DEFAULT_TYPE = "simple"
 
+const (
+	dead         = "dead"
+	startPre     = "startPre"
+	start        = "start"
+	startPost    = "startPost"
+	running      = "running"
+	exited       = "exited" // not running anymore, but RemainAfterExit true for this unit
+	reload       = "reload"
+	stop         = "stop"
+	stopSigabrt  = "stopSigabrt" // watchdog timeout
+	stopSigterm  = "stopSigterm"
+	stopSigkill  = "stopSigkill"
+	stopPost     = "stopPost"
+	finalSigterm = "finalSigterm"
+	finalSigkill = "finalSigkill"
+	failed       = "failed"
+	autoRestart  = "autoRestart"
+)
+
 var supported = map[string]bool{
 	"oneshot": true,
 	"simple":  true,
@@ -99,7 +118,7 @@ func (sv *Unit) Stop() (err error) {
 }
 
 // Sub reports the sub status of a service
-func (sv *Unit) Sub() Sub {
+func (sv *Unit) Sub() string {
 	if sv.Cmd == nil {
 		panic(unit.ErrNotParsed)
 	}
@@ -107,43 +126,39 @@ func (sv *Unit) Sub() Sub {
 	switch {
 	case sv.Cmd.Process == nil:
 		// Service has not been started yet
-		return Dead
+		return dead
 
 	case sv.Cmd.ProcessState == nil:
 		// Wait has not returned yet
-		return Running
+		return running
 
 	case sv.ProcessState.Exited(), sv.ProcessState.Success():
 		if sv.Definition.Service.RemainAfterExit {
-			return Exited
+			return exited
 		}
-		return Dead
+		return dead
 
 	default:
 		// Service process has finished, but did not return a 0 exit code
-		return Failed
+		return failed
 	}
 }
 
-func (sv *Unit) Active() unit.Activation {
-	return sv.Sub().Active()
-}
-
 // Active reports activation status of a service
-func (s Sub) Active() unit.Activation {
+func (sv *Unit) Active() unit.Activation {
 	// based of Systemd transtition table found in https://goo.gl/oEjikJ
-	switch s {
-	case Dead:
+	switch sv.Sub() {
+	case dead:
 		return unit.Inactive
-	case Failed:
+	case failed:
 		return unit.Failed
-	case Reload:
+	case reload:
 		return unit.Reloading
-	case Running, Exited:
+	case running, exited:
 		return unit.Active
-	case Start, StartPre, StartPost, AutoRestart:
+	case start, startPre, startPost, autoRestart:
 		return unit.Activating
-	case Stop, StopSigabrt, StopPost, StopSigkill, StopSigterm, FinalSigkill, FinalSigterm:
+	case stop, stopSigabrt, stopPost, stopSigkill, stopSigterm, finalSigkill, finalSigterm:
 		return unit.Deactivating
 	default:
 		panic("Unknown service sub state")
