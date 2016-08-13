@@ -92,30 +92,6 @@ func (u *Unit) Sub() string {
 	return u.Interface.Sub()
 }
 
-// Requires returns a slice of unit names as found in definition and absolute paths
-// of units symlinked in units '.wants' directory
-func (u *Unit) Requires() (names []string) {
-	names = u.Interface.Requires()
-
-	if paths, err := u.parseDepDir(".requires"); err == nil {
-		names = append(names, paths...)
-	}
-
-	return
-}
-
-// Wants returns a slice of unit names as found in definition and absolute paths
-// of units symlinked in units '.wants' directory
-func (u *Unit) Wants() (names []string) {
-	names = u.Interface.Wants()
-
-	if paths, err := u.parseDepDir(".wants"); err == nil {
-		names = append(names, paths...)
-	}
-
-	return
-}
-
 func (u *Unit) Status() fmt.Stringer {
 	st := unit.Status{
 		Load: unit.LoadStatus{
@@ -136,6 +112,115 @@ func (u *Unit) Status() fmt.Stringer {
 	default:
 		return st
 	}
+}
+
+// Requires returns a slice of unit names as found in definition and absolute paths
+// of units symlinked in units '.wants' directory
+func (u *Unit) Requires() (names []string) {
+	names = u.Interface.Requires()
+
+	if paths, err := readDepDir(u.requiresDir()); err == nil {
+		names = append(names, paths...)
+	}
+
+	return
+}
+
+// Wants returns a slice of unit names as found in definition and absolute paths
+// of units symlinked in units '.wants' directory
+func (u *Unit) Wants() (names []string) {
+	names = u.Interface.Wants()
+
+	if paths, err := readDepDir(u.wantsDir()); err == nil {
+		names = append(names, paths...)
+	}
+
+	return
+}
+
+func (u *Unit) wantsDir() (path string) {
+	return u.depDir("wants")
+}
+
+func (u *Unit) requiresDir() (path string) {
+	return u.depDir("requires")
+}
+
+func (u *Unit) depDir(suffix string) (path string) {
+	return u.Path() + "." + suffix
+}
+
+func linkDep(dir string, dep *Unit) (err error) {
+	if err = os.Mkdir(dir, 0755); err != nil && err != os.ErrExist {
+		return err
+	}
+
+	return os.Symlink(dep.Path(), filepath.Join(dir, dep.Name()))
+}
+
+func unlinkDep(dir string, dep *Unit) (err error) {
+	if err = os.Remove(filepath.Join(dir, dep.Name())); err != nil && err != os.ErrNotExist {
+		return
+	}
+	return nil
+}
+
+func (u *Unit) addWantsDep(dep *Unit) (err error) {
+	return linkDep(u.wantsDir(), dep)
+}
+
+func (u *Unit) addRequiresDep(dep *Unit) (err error) {
+	return linkDep(u.requiresDir(), dep)
+}
+
+func (u *Unit) removeWantsDep(dep *Unit) (err error) {
+	return unlinkDep(u.wantsDir(), dep)
+}
+
+func (u *Unit) removeRequiresDep(dep *Unit) (err error) {
+	return unlinkDep(u.requiresDir(), dep)
+}
+
+func (u *Unit) Enable() (err error) {
+	err = u.System.getAndExecute(u.RequiredBy(), func(dep *Unit, gerr error) error {
+		if gerr != nil {
+			return gerr
+		}
+
+		return dep.addRequiresDep(u)
+	})
+	if err != nil {
+		return
+	}
+
+	return u.System.getAndExecute(u.WantedBy(), func(dep *Unit, gerr error) error {
+		if gerr != nil {
+			return gerr
+		}
+
+		return dep.addWantsDep(u)
+	})
+}
+
+func (u *Unit) Disable() (err error) {
+	err = u.System.getAndExecute(u.RequiredBy(), func(dep *Unit, gerr error) error {
+		if gerr != nil {
+			return gerr
+		}
+
+		return dep.removeRequiresDep(u)
+	})
+	if err != nil {
+		return
+	}
+
+	return u.System.getAndExecute(u.WantedBy(), func(dep *Unit, gerr error) error {
+		if gerr != nil {
+			return gerr
+		}
+
+		return dep.removeWantsDep(u)
+	})
 }
 
 func (u *Unit) IsReloader() (ok bool) {
@@ -202,26 +287,16 @@ func (u *Unit) stop() (err error) {
 	return stopper.Stop()
 }
 
-func (u *Unit) parseDepDir(suffix string) (paths []string, err error) {
-	if u.path == "" {
-		return paths, errors.New("Path is empty")
-	}
-
-	dirpath := u.path + suffix
-
-	links, err := pathset(dirpath)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			u.Log.Printf("Error parsing %s: %s", dirpath, err)
-		}
+func readDepDir(dir string) (paths []string, err error) {
+	var links []string
+	if links, err = pathset(dir); err != nil {
 		return
 	}
 
 	paths = make([]string, 0, len(links))
 	for _, path := range links {
 		if path, err = filepath.EvalSymlinks(path); err != nil {
-			u.Log.Printf("Error reading link at %s: %s", path, err)
-			continue
+			return
 		}
 		paths = append(paths, path)
 	}

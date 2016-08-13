@@ -218,14 +218,9 @@ func (sys *Daemon) Get(name string) (u *Unit, err error) {
 	return
 }
 
-func (sys *Daemon) getAndExecute(names []string, fn func(*Unit) error) (err error) {
+func (sys *Daemon) getAndExecute(names []string, fn func(*Unit, error) error) (err error) {
 	for _, name := range names {
-		var u *Unit
-		if u, err = sys.Get(name); err != nil {
-			return
-		}
-
-		if err = fn(u); err != nil {
+		if err = fn(sys.Get(name)); err != nil {
 			return
 		}
 	}
@@ -234,12 +229,24 @@ func (sys *Daemon) getAndExecute(names []string, fn func(*Unit) error) (err erro
 
 // TODO
 func (sys *Daemon) Enable(names ...string) (err error) {
-	return ErrNotImplemented
+	return sys.getAndExecute(names, func(u *Unit, gerr error) error {
+		if gerr != nil {
+			return gerr
+		}
+
+		return u.Enable()
+	})
 }
 
 // TODO
 func (sys *Daemon) Disable(names ...string) (err error) {
-	return ErrNotImplemented
+	return sys.getAndExecute(names, func(u *Unit, gerr error) error {
+		if gerr != nil {
+			return gerr
+		}
+
+		return u.Disable()
+	})
 }
 
 // TODO: isolate, check redundant jobs, fail fast
