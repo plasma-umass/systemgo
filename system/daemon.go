@@ -41,13 +41,6 @@ type Daemon struct {
 }
 
 func New() (sys *Daemon) {
-	defer func() {
-		if debug {
-			sys.Log.Logger.Hooks.Add(&errorHook{
-				Source: "system",
-			})
-		}
-	}()
 	return &Daemon{
 		units: make(map[string]*Unit),
 
@@ -62,6 +55,9 @@ func (sys *Daemon) Paths() (paths []string) {
 }
 
 func (sys *Daemon) SetPaths(paths ...string) {
+	sys.mutex.Lock()
+	defer sys.mutex.Unlock()
+
 	sys.paths = paths
 }
 

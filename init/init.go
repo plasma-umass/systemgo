@@ -3,8 +3,9 @@ package init
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
+
+	log "github.com/Sirupsen/logrus"
 
 	"github.com/rvolosatovs/systemgo/system"
 	"github.com/rvolosatovs/systemgo/systemctl"
@@ -20,6 +21,9 @@ type Configuration struct {
 
 	// Method of communication with systemctl
 	Method string
+
+	// Debug
+	Debug bool
 
 	// Http connection configuration
 	*httpConfig
@@ -55,23 +59,25 @@ var (
 
 			"test",
 		},
+		Debug: true,
 	}
 )
 
 // boot initializes the system, sets the default paths, as specified in configuration and attempts to start the default target, falls back to "rescue.target", if it fails
 func Boot() {
+	if Conf.Debug {
+		log.SetLevel(log.DebugLevel)
+	}
+
 	// Initialize system
 	System = system.New()
-
 	System.SetPaths(Conf.Paths...)
 
 	// Start the default target
 	if err := System.Start(Conf.Target); err != nil {
-		//sys.Log.Printf("Error starting default target %s: %s", Conf.Target, err)
-		log.Printf("Error starting default target %s: %s", Conf.Target, err)
+		System.Log.Errorf("Error starting default target %s: %s", Conf.Target, err)
 		if err = System.Start("rescue.target"); err != nil {
-			//sys.Log.Printf("Error starting rescue target %s: %s", "rescue.target", err)
-			log.Printf("Error starting rescue target %s: %s", "rescue.target", err)
+			System.Log.Errorf("Error starting rescue target %s: %s", "rescue.target", err)
 		}
 	}
 }
