@@ -180,48 +180,70 @@ func (sys *Daemon) jobCount() (n int) {
 //return
 //}
 
-func (sys *Daemon) Supervise(name string, v unit.Interface) (u *Unit, err error) {
-	if _, exists := sys.units[name]; exists {
-		return nil, ErrExists
+func (sys *Daemon) Start(names ...string) (err error) {
+	var tr *transaction
+	if tr, err = sys.newTransaction(start, names); err != nil {
+		return
 	}
-
-	u = NewUnit(v)
-	u.System = sys
-
-	u.name = name
-	sys.units[name] = u
-
-	log.WithFields(log.Fields{
-		"unit": name,
-	}).Debugf("Created new *Unit")
-
-	return
+	return tr.Run()
 }
 
-// Unit looks up the unit name in the internal hasmap of loaded units and returns it
-// If error is returned, it will be error from sys.Load(name)
-func (sys *Daemon) Unit(name string) (u *Unit, err error) {
-	var ok bool
-	if u, ok = sys.units[name]; !ok {
-		return nil, ErrNotFound
+func (sys *Daemon) Stop(names ...string) (err error) {
+	var tr *transaction
+	if tr, err = sys.newTransaction(stop, names); err != nil {
+		return
 	}
-	return
+	return tr.Run()
 }
 
-// Get looks up the unit name in the internal hasmap of loaded units and calls
-// sys.Load(name) if it can not be found
-// If error is returned, it will be error from sys.Load(name)
-func (sys *Daemon) Get(name string) (u *Unit, err error) {
-	if u, err = sys.Unit(name); err != nil || !u.IsLoaded() {
-		return sys.Load(name)
+func (sys *Daemon) Isolate(names ...string) (err error) {
+	var tr *transaction
+	if tr, err = sys.newTransaction(start, names); err != nil {
+		return
 	}
-	return
+
+	units := sys.Units()
+	names = make([]string, 0, len(units)-len(tr.unmerged))
+	for _, u := range units {
+		if _, ok := tr.unmerged[u]; !ok {
+			if err = tr.add(stop, u, nil, true, true); err != nil {
+				return
+			}
+		}
+	}
+	return tr.Run()
 }
 
-func (sys *Daemon) getAndExecute(names []string, fn func(*Unit, error) error) (err error) {
+func (sys *Daemon) Restart(names ...string) (err error) {
+	var tr *transaction
+	if tr, err = sys.newTransaction(restart, names); err != nil {
+		return
+	}
+	return tr.Run()
+}
+
+func (sys *Daemon) Reload(names ...string) (err error) {
+	var tr *transaction
+	if tr, err = sys.newTransaction(reload, names); err != nil {
+		return
+	}
+	return tr.Run()
+}
+
+func (sys *Daemon) newTransaction(typ jobType, names []string) (tr *transaction, err error) {
+	sys.mutex.Lock()
+	defer sys.mutex.Unlock()
+
+	tr = newTransaction()
+
 	for _, name := range names {
-		if err = fn(sys.Get(name)); err != nil {
-			return
+		var dep *Unit
+		if dep, err = sys.Get(name); err != nil {
+			return nil, err
+		}
+
+		if err = tr.add(typ, dep, nil, true, true); err != nil {
+			return nil, err
 		}
 	}
 	return
@@ -249,48 +271,64 @@ func (sys *Daemon) Disable(names ...string) (err error) {
 	})
 }
 
-// TODO: isolate, check redundant jobs, fail fast
-
-func (sys *Daemon) Stop(names ...string) (err error) {
-	var tr *transaction
-	if tr, err = sys.newTransaction(stop, names); err != nil {
-		return
-	}
-	return tr.Run()
-}
-
-func (sys *Daemon) Start(names ...string) (err error) {
-	var tr *transaction
-	if tr, err = sys.newTransaction(start, names); err != nil {
-		return
-	}
-	return tr.Run()
-}
-
-func (sys *Daemon) Restart(names ...string) (err error) {
-	var tr *transaction
-	if tr, err = sys.newTransaction(restart, names); err != nil {
-		return
-	}
-	return tr.Run()
-}
-
-func (sys *Daemon) newTransaction(t jobType, names []string) (tr *transaction, err error) {
-	sys.mutex.Lock()
-	defer sys.mutex.Unlock()
-
-	tr = newTransaction()
-
+func (sys *Daemon) getAndExecute(names []string, fn func(*Unit, error) error) (err error) {
 	for _, name := range names {
-		var dep *Unit
-		if dep, err = sys.Get(name); err != nil {
-			return nil, err
-		}
-
-		if err = tr.add(t, dep, nil, true, true); err != nil {
-			return nil, err
+		if err = fn(sys.Get(name)); err != nil {
+			return
 		}
 	}
+	return
+}
+
+// Units returns a slice of all units created
+func (sys *Daemon) Units() (units []*Unit) {
+	unitSet := map[*Unit]struct{}{}
+	for _, u := range sys.units {
+		unitSet[u] = struct{}{}
+	}
+
+	units = make([]*Unit, 0, len(unitSet))
+	for u := range unitSet {
+		units = append(units, u)
+	}
+	return
+}
+
+// Unit looks up the unit name in the internal hasmap of loaded units and returns it
+// If error is returned, it will be error from sys.Load(name)
+func (sys *Daemon) Unit(name string) (u *Unit, err error) {
+	var ok bool
+	if u, ok = sys.units[name]; !ok {
+		return nil, ErrNotFound
+	}
+	return
+}
+
+// Get looks up the unit name in the internal hasmap of loaded units and calls
+// sys.Load(name) if it can not be found
+// If error is returned, it will be error from sys.Load(name)
+func (sys *Daemon) Get(name string) (u *Unit, err error) {
+	if u, err = sys.Unit(name); err != nil || !u.IsLoaded() {
+		return sys.Load(name)
+	}
+	return
+}
+
+func (sys *Daemon) Supervise(name string, v unit.Interface) (u *Unit, err error) {
+	if _, exists := sys.units[name]; exists {
+		return nil, ErrExists
+	}
+
+	u = NewUnit(v)
+	u.System = sys
+
+	u.name = name
+	sys.units[name] = u
+
+	log.WithFields(log.Fields{
+		"unit": name,
+	}).Debugf("Created new *Unit")
+
 	return
 }
 
