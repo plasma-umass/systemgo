@@ -5,14 +5,11 @@ import "io"
 type Interface interface {
 	Definer
 	Subber
-	StartStopper
 
 	Description() string
 	Documentation() string
 
 	Dependency
-
-	Orderable
 }
 
 type Definer interface {
@@ -54,9 +51,7 @@ type Dependency interface {
 
 	RequiredBy() []string
 	WantedBy() []string
-}
 
-type Orderable interface {
 	After() []string
 	Before() []string
 }

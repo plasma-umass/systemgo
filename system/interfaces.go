@@ -3,7 +3,7 @@ package system
 import (
 	"fmt"
 
-	"github.com/b1101/systemgo/unit"
+	"github.com/rvolosatovs/systemgo/unit"
 )
 
 // Supervisable represents anything that can be supervised by an instance of a system.Interface
@@ -22,7 +22,7 @@ type Statuser interface {
 // Provides handlers for system control and is meant to be exposed
 // to the 'init' package, or anything else that could want to use it
 type Getter interface {
-	Get(string) (*Unit, error)
+	Get(string) (Supervisable, error)
 }
 type Loader interface {
 	Load(string) (*Unit, error)

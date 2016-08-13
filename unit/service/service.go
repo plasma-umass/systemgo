@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/b1101/systemgo/unit"
+	"github.com/rvolosatovs/systemgo/unit"
 )
 
 const DEFAULT_TYPE = "simple"

@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/b1101/systemgo/init"
-	"github.com/b1101/systemgo/unit"
+	. "github.com/rvolosatovs/systemgo/init"
+	"github.com/rvolosatovs/systemgo/unit"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -111,7 +111,6 @@ func TestBoot(t *testing.T) {
 				continue
 			}
 
-			u.Wait()
 			fmt.Println(u.Status())
 			assert.Equal(t, unit.Active, u.Active(), fmt.Sprintf("%s - %s", c.name, u.Active()))
 		}

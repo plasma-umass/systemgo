@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/b1101/systemgo/system"
-	"github.com/b1101/systemgo/test/mock_unit"
-	"github.com/b1101/systemgo/unit"
-	"github.com/b1101/systemgo/unit/target"
+	"github.com/rvolosatovs/systemgo/system"
+	"github.com/rvolosatovs/systemgo/test/mock_unit"
+	"github.com/rvolosatovs/systemgo/unit"
+	"github.com/rvolosatovs/systemgo/unit/target"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 )

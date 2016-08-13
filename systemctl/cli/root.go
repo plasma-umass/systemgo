@@ -1,4 +1,4 @@
-// Copyright © 2016 Romans Volosatovs <b1101@riseup.net>
+// Copyright © 2016 Romans Volosatovs <rvolosatovs@riseup.net>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -25,8 +25,8 @@ import (
 	"log"
 	"os"
 
-	"github.com/b1101/systemgo/system"
-	"github.com/b1101/systemgo/systemctl"
+	"github.com/rvolosatovs/systemgo/system"
+	"github.com/rvolosatovs/systemgo/systemctl"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )

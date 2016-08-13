@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/b1101/systemgo/unit"
+	"github.com/rvolosatovs/systemgo/unit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

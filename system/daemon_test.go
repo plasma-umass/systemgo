@@ -8,12 +8,26 @@ import (
 	"testing"
 	"time"
 
-	"github.com/b1101/systemgo/test/mock_unit"
-	"github.com/b1101/systemgo/unit"
 	"github.com/golang/mock/gomock"
+	"github.com/rvolosatovs/systemgo/test/mock_unit"
+	"github.com/rvolosatovs/systemgo/unit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type mockUnit struct {
+	*mock_unit.MockInterface
+	*mock_unit.MockStarter
+	*mock_unit.MockStopper
+}
+
+func newMock(ctrl *gomock.Controller) (u *mockUnit) {
+	return &mockUnit{
+		MockInterface: mock_unit.NewMockInterface(ctrl),
+		MockStarter:   mock_unit.NewMockStarter(ctrl),
+		MockStopper:   mock_unit.NewMockStopper(ctrl),
+	}
+}
 
 func TestGet(t *testing.T) {
 	sys := New()
@@ -30,18 +44,19 @@ func TestGet(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	uInt := mock_unit.NewMockInterface(ctrl)
-	uInt.EXPECT().Define(gomock.Any()).Return(nil).Times(2)
+	m := newMock(ctrl)
 
-	u := NewUnit(uInt)
+	m.MockInterface.EXPECT().Define(gomock.Any()).Return(nil).Times(1)
 
-	sys.parsed[name] = u
-	sys.parsed[fpath] = u
+	u, err := sys.Supervise(name, m)
+	require.NoError(t, err)
+
+	sys.units[fpath] = u
 
 	for _, name := range []string{name, fpath} {
 		ptr, err := sys.Get(name)
-		require.NoError(t, err, "sys.Get")
-		assert.Equal(t, u, ptr, "*Unit")
+		require.NoError(t, err, name)
+		assert.Equal(t, u, ptr, name)
 	}
 }
 
@@ -85,77 +100,81 @@ func TestStart(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	abc := map[string]*mock_unit.MockInterface{
-		"a": mock_unit.NewMockInterface(ctrl),
-		"b": mock_unit.NewMockInterface(ctrl),
-		"c": mock_unit.NewMockInterface(ctrl),
+	abc := map[string]*mockUnit{
+		"a": newMock(ctrl),
+		"b": newMock(ctrl),
+		"c": newMock(ctrl),
 	}
 
-	abc["a"].EXPECT().Requires().Return([]string{"b", "c"}).Times(2)
-	abc["b"].EXPECT().Requires().Return([]string{"c"}).Times(2)
+	abc["a"].MockInterface.EXPECT().Requires().Return([]string{"b", "c"}).Times(1)
+	abc["a"].MockInterface.EXPECT().After().Return([]string{"b", "c"}).Times(1)
 
-	abc["a"].EXPECT().After().Return([]string{"b", "c"}).Times(1)
-	abc["b"].EXPECT().After().Return([]string{"c"}).Times(1)
-
-	abc["b"].EXPECT().Active().Return(unit.Active).Times(1)
-	abc["c"].EXPECT().Active().Return(unit.Active).Times(2)
+	abc["b"].MockInterface.EXPECT().Requires().Return([]string{"c"}).Times(1)
+	abc["b"].MockInterface.EXPECT().After().Return([]string{"c"}).Times(1)
 
 	empty(abc["a"], "wants", "before", "conflicts")
 	empty(abc["b"], "wants", "before", "conflicts")
-	empty(abc["c"], "wants", "after", "before", "conflicts", "requires")
+	empty(abc["c"], "wants", "before", "conflicts", "after", "requires")
 
-	for mocks, seq := range map[*map[string]*mock_unit.MockInterface][]string{
+	for mocks, seq := range map[*map[string]*mockUnit][]string{
 		&abc: {"a", "b", "c"},
 	} {
 		sys := New()
 
 		for name, m := range *mocks {
-			u := NewUnit(m)
-			sys.loaded[name] = u
-			sys.names[u] = name
-		}
+			u, err := sys.Supervise(name, m)
+			require.NoError(t, err)
 
-		fmt.Println("----- Units -----")
-		fmt.Println("pointer\t\tname")
-		for name, u := range sys.loaded {
-			fmt.Printf("%p\t%s\n", u, name)
+			u.loaded = unit.Loaded
 		}
-		fmt.Println("-----------------")
 
 		sequence(*mocks, seq)
 
-		assert.NoError(t, sys.Start(seq[0]), "sys.Start("+seq[0]+")")
+		assert.NoError(t, sys.Start("a"), "sys.Start("+"a"+")")
 
 		time.Sleep(time.Second)
 	}
 }
 
-func sequence(units map[string]*mock_unit.MockInterface, names []string) *gomock.Call {
+func TestStop(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	m := newMock(ctrl)
+
+	sys := New()
+
+	m.MockInterface.EXPECT().Conflicts().Return([]string{}).Times(1)
+
+	u, err := sys.Supervise("TestStop", m)
+	u.loaded = unit.Loaded
+	require.NoError(t, err)
+
+	assert.Error(t, sys.Stop(u.Name()))
+	assert.NoError(t, sys.Stop(u.Name()))
+}
+
+func sequence(units map[string]*mockUnit, names []string) *gomock.Call {
 	switch len(names) {
 	case 0:
 		return nil
 	case 1:
 		fmt.Printf("<-%s\n", names[0])
-		return units[names[0]].EXPECT().Start().Return(nil).Times(1)
+		return units[names[0]].MockStarter.EXPECT().Start().Return(nil).Times(1)
 	default:
 		fmt.Printf("<-%s", names[0])
-		return units[names[0]].EXPECT().Start().Return(nil).After(sequence(units, names[1:])).Times(1)
+		return units[names[0]].MockStarter.EXPECT().Start().Return(nil).After(sequence(units, names[1:])).Times(1)
 	}
 }
 
-func empty(m *mock_unit.MockInterface, methods ...string) {
+func empty(m *mockUnit, methods ...string) {
 	for _, method := range methods {
-		c := emptyOne(m, method)
-		if method == "requires" {
-			c.Times(2)
-		} else {
-			c.Times(1)
-		}
+		emptyOne(m, method).Times(1)
 	}
 }
 
-func emptyOne(m *mock_unit.MockInterface, method string) (c *gomock.Call) {
-	exp := m.EXPECT()
+func emptyOne(m *mockUnit, method string) (c *gomock.Call) {
+	exp := m.MockInterface.EXPECT()
 	switch method {
 	case "requires":
 		c = exp.Requires()

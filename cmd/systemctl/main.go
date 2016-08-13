@@ -1,4 +1,4 @@
-// Copyright © 2016 Romans Volosatovs <b1101@riseup.net>
+// Copyright © 2016 Romans Volosatovs <rvolosatovs@riseup.net>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -20,7 +20,7 @@
 
 package main
 
-import "github.com/b1101/systemgo/systemctl/cli"
+import "github.com/rvolosatovs/systemgo/systemctl/cli"
 
 func main() {
 	cli.Execute()
