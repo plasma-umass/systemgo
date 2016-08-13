@@ -7,11 +7,11 @@ import (
 
 type Daemon interface {
 	Start(...string) error
-	Stop(string) error
-	Restart(string) error
-	Reload(string) error
-	Enable(string) error
-	Disable(string) error
+	Stop(...string) error
+	Restart(...string) error
+	Reload(...string) error
+	Enable(...string) error
+	Disable(...string) error
 
 	Status() (system.Status, error)
 	StatusOf(string) (unit.Status, error)
