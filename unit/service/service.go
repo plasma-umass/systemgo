@@ -2,19 +2,14 @@
 package service
 
 import (
-	"errors"
-	"fmt"
 	"io"
 	"os/exec"
 	"strings"
-	"time"
 
 	"github.com/rvolosatovs/systemgo/unit"
 )
 
 const DEFAULT_TYPE = "simple"
-
-var ErrNotStarted = errors.New("Service not started")
 
 var supported = map[string]bool{
 	"oneshot": true,
@@ -29,8 +24,6 @@ var supported = map[string]bool{
 type Unit struct {
 	Definition
 	*exec.Cmd
-
-	starting, reloading bool
 }
 
 // Service unit definition
@@ -50,7 +43,7 @@ func Supported(typ string) (is bool) {
 }
 
 // Define attempts to fill the sv definition by parsing r
-func (sv *Unit) Define(r io.Reader) (err error) {
+func (sv *Unit) Define(r io.Reader /*, errch chan<- error*/) (err error) {
 	def := Definition{}
 	def.Service.Type = DEFAULT_TYPE
 
@@ -75,54 +68,71 @@ func (sv *Unit) Define(r io.Reader) (err error) {
 
 	sv.Definition = def
 
-	return nil
-}
+	cmd := strings.Fields(def.Service.ExecStart)
+	sv.Cmd = exec.Command(cmd[0], cmd[1:]...)
 
-func parseCommand(ExecStart string) *exec.Cmd {
-	cmd := strings.Fields(ExecStart)
-	return exec.Command(cmd[0], cmd[1:]...)
+	return nil
 }
 
 // Start executes the command specified in service definition
 func (sv *Unit) Start() (err error) {
-	sv.starting = true
-	defer func() {
-		sv.starting = false
-	}()
-
-	if sv.Cmd == nil {
-		sv.Cmd = parseCommand(sv.Definition.Service.ExecStart)
-	}
 	switch sv.Definition.Service.Type {
 	case "simple":
-		return sv.Cmd.Start()
+		if err = sv.Cmd.Start(); err == nil {
+			go sv.Cmd.Wait()
+		}
+		return
 	case "oneshot":
 		return sv.Cmd.Run()
 	default:
-		return unit.ErrNotSupported
+		panic("Unknown service type")
 	}
 }
 
 // Stop stops execution of the command specified in service definition
 func (sv *Unit) Stop() (err error) {
-	if sv.Cmd == nil {
-		return ErrNotStarted
+	if sv.Cmd.Process == nil {
+		return unit.ErrNotStarted
 	}
+
 	return sv.Process.Kill()
 }
 
-func (sv *Unit) IsReloading() bool {
-	return sv.reloading
+// Sub reports the sub status of a service
+func (sv *Unit) Sub() Sub {
+	if sv.Cmd == nil {
+		panic(unit.ErrNotParsed)
+	}
+
+	switch {
+	case sv.Cmd.Process == nil:
+		// Service has not been started yet
+		return Dead
+
+	case sv.Cmd.ProcessState == nil:
+		// Wait has not returned yet
+		return Running
+
+	case sv.ProcessState.Exited(), sv.ProcessState.Success():
+		if sv.Definition.Service.RemainAfterExit {
+			return Exited
+		}
+		return Dead
+
+	default:
+		// Service process has finished, but did not return a 0 exit code
+		return Failed
+	}
 }
 
-func (sv *Unit) IsStarting() bool {
-	return sv.starting
+func (sv *Unit) Active() unit.Activation {
+	return sv.Sub().Active()
 }
 
 // Active reports activation status of a service
-func (sv *Unit) Active() unit.Activation {
+func (s Sub) Active() unit.Activation {
 	// based of Systemd transtition table found in https://goo.gl/oEjikJ
-	switch sv.sub() {
+	switch s {
 	case Dead:
 		return unit.Inactive
 	case Failed:
@@ -136,75 +146,6 @@ func (sv *Unit) Active() unit.Activation {
 	case Stop, StopSigabrt, StopPost, StopSigkill, StopSigterm, FinalSigkill, FinalSigterm:
 		return unit.Deactivating
 	default:
-		// Unreachable
-		return -1
+		panic("Unknown service sub state")
 	}
-}
-
-// Sub reports the sub status of a service
-func (sv *Unit) Sub() string {
-	return sv.sub().String()
-}
-
-func (sv *Unit) sub() (s Sub) {
-	switch def := sv.Definition.Service; {
-	case sv.IsReloading():
-		return Reload
-
-	case sv.IsStarting():
-		return Start
-
-	case sv.Cmd == nil, sv.Cmd.Process == nil:
-		// Service has not been started yet
-		return Dead
-
-	case sv.Cmd.ProcessState == nil:
-		return Running
-		// TODO: find a way to distinguish between Failed and Running processes
-		//if isRunning(sv.Cmd) {
-		//return Running
-		//} else if sv.Cmd.ProcessState == nil {
-		//return Failed
-		//}
-		//fallthrough
-
-	case sv.ProcessState.Success() && def.Type == "oneshot" && def.RemainAfterExit:
-		// Service process successfully exited
-		return Exited
-
-	case sv.ProcessState.Exited():
-		return Stop
-
-		// TODO (if needed)
-		// // Should be safe on Unix
-		// switch st := sv.ProcessState.Sys().(syscall.WaitStatus); {
-		// }
-
-	default:
-		// Service process has finished, but did not return a 0 exit code
-		return Failed
-	}
-}
-
-// Does not work
-func isRunning(cmd *exec.Cmd) (running bool) {
-	running = true
-
-	defer func() {
-		fmt.Println("recovering")
-		if r := recover(); r != nil {
-			fmt.Println(r)
-		}
-	}()
-
-	go func() {
-		time.Sleep(time.Millisecond)
-		if running {
-			panic("")
-		}
-	}()
-
-	cmd.Process.Wait()
-	running = false
-	return
 }
