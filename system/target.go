@@ -6,6 +6,11 @@ import (
 	"github.com/rvolosatovs/systemgo/unit"
 )
 
+const (
+	active = "active"
+	dead   = "dead"
+)
+
 // Target unit type.
 // Is different enough from other units to not include
 // it in the unit package
@@ -41,5 +46,8 @@ func (targ *Target) Active() unit.Activation {
 }
 
 func (targ *Target) Sub() string {
-	return "TODO"
+	if unit.IsActive(targ) {
+		return active
+	}
+	return dead
 }
