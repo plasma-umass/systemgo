@@ -1,4 +1,4 @@
-package target
+package system
 
 import (
 	"io"
@@ -9,21 +9,22 @@ import (
 // Target unit type.
 // Is different enough from other units to not include
 // it in the unit package
-type Unit struct {
+type Target struct {
 	unit.Definition
+	System *Daemon
 }
 
 // Define attempts to fill the targ definition by parsing r
-func (targ *Unit) Define(r io.Reader) (err error) {
+func (targ *Target) Define(r io.Reader) (err error) {
 	return unit.ParseDefinition(r, &targ.Definition)
 }
 
 // Active returns activation status of the unit
-func (targ *Unit) Active() unit.Activation {
+func (targ *Target) Active() unit.Activation {
 	encountered := map[unit.Activation]bool{}
 
 	for _, name := range targ.Definition.Unit.Requires {
-		dep, err := targ.Get(name)
+		dep, err := targ.System.Get(name)
 		if err != nil {
 			return unit.Inactive
 		}
@@ -39,6 +40,6 @@ func (targ *Unit) Active() unit.Activation {
 	return unit.Active
 }
 
-func (targ *Unit) Sub() string {
+func (targ *Target) Sub() string {
 	return "TODO"
 }
