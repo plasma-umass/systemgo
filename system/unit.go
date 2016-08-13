@@ -114,6 +114,16 @@ func (u *Unit) Status() fmt.Stringer {
 	}
 }
 
+func (u *Unit) IsReloader() (ok bool) {
+	_, ok = u.Interface.(unit.Reloader)
+	return
+}
+
+func (u *Unit) Reload() (err error) {
+	// TODO reload transaction
+	return
+}
+
 // Requires returns a slice of unit names as found in definition and absolute paths
 // of units symlinked in units '.wants' directory
 func (u *Unit) Requires() (names []string) {
@@ -150,37 +160,6 @@ func (u *Unit) depDir(suffix string) (path string) {
 	return u.Path() + "." + suffix
 }
 
-func linkDep(dir string, dep *Unit) (err error) {
-	if err = os.Mkdir(dir, 0755); err != nil && err != os.ErrExist {
-		return err
-	}
-
-	return os.Symlink(dep.Path(), filepath.Join(dir, dep.Name()))
-}
-
-func unlinkDep(dir string, dep *Unit) (err error) {
-	if err = os.Remove(filepath.Join(dir, dep.Name())); err != nil && err != os.ErrNotExist {
-		return
-	}
-	return nil
-}
-
-func (u *Unit) addWantsDep(dep *Unit) (err error) {
-	return linkDep(u.wantsDir(), dep)
-}
-
-func (u *Unit) addRequiresDep(dep *Unit) (err error) {
-	return linkDep(u.requiresDir(), dep)
-}
-
-func (u *Unit) removeWantsDep(dep *Unit) (err error) {
-	return unlinkDep(u.wantsDir(), dep)
-}
-
-func (u *Unit) removeRequiresDep(dep *Unit) (err error) {
-	return unlinkDep(u.requiresDir(), dep)
-}
-
 func (u *Unit) Enable() (err error) {
 	err = u.System.getAndExecute(u.RequiredBy(), func(dep *Unit, gerr error) error {
 		if gerr != nil {
@@ -200,6 +179,22 @@ func (u *Unit) Enable() (err error) {
 
 		return dep.addWantsDep(u)
 	})
+}
+
+func (u *Unit) addWantsDep(dep *Unit) (err error) {
+	return linkDep(u.wantsDir(), dep)
+}
+
+func (u *Unit) addRequiresDep(dep *Unit) (err error) {
+	return linkDep(u.requiresDir(), dep)
+}
+
+func linkDep(dir string, dep *Unit) (err error) {
+	if err = os.Mkdir(dir, 0755); err != nil && err != os.ErrExist {
+		return err
+	}
+
+	return os.Symlink(dep.Path(), filepath.Join(dir, dep.Name()))
 }
 
 func (u *Unit) Disable() (err error) {
@@ -223,14 +218,19 @@ func (u *Unit) Disable() (err error) {
 	})
 }
 
-func (u *Unit) IsReloader() (ok bool) {
-	_, ok = u.Interface.(unit.Reloader)
-	return
+func (u *Unit) removeWantsDep(dep *Unit) (err error) {
+	return unlinkDep(u.wantsDir(), dep)
 }
 
-func (u *Unit) Reload() (err error) {
-	// TODO reload transaction
-	return
+func (u *Unit) removeRequiresDep(dep *Unit) (err error) {
+	return unlinkDep(u.requiresDir(), dep)
+}
+
+func unlinkDep(dir string, dep *Unit) (err error) {
+	if err = os.Remove(filepath.Join(dir, dep.Name())); err != nil && err != os.ErrNotExist {
+		return
+	}
+	return nil
 }
 
 func (u *Unit) reload() (err error) {
@@ -239,6 +239,14 @@ func (u *Unit) reload() (err error) {
 		return ErrNoReload
 	}
 	return reloader.Reload()
+}
+
+func (u *Unit) Start() (err error) {
+	tr := newTransaction()
+	if err = tr.add(start, u, nil, true, true); err != nil {
+		return
+	}
+	return tr.Run()
 }
 
 func (u *Unit) start() (err error) {
@@ -250,11 +258,6 @@ func (u *Unit) start() (err error) {
 
 	u.Log.Println("Starting...")
 
-	log.Debugf("All dependencies of %p finished loading", u)
-	if err != nil {
-		return err
-	}
-
 	starter, ok := u.Interface.(unit.Starter)
 	if !ok {
 		return nil
@@ -263,21 +266,22 @@ func (u *Unit) start() (err error) {
 	return starter.Start()
 }
 
-func (u *Unit) Start() (err error) {
+func (u *Unit) Stop() (err error) {
 	tr := newTransaction()
-	if err = tr.add(start, u, nil, true, true); err != nil {
+	if err = tr.add(stop, u, nil, true, true); err != nil {
 		return
 	}
 	return tr.Run()
 }
 
 func (u *Unit) stop() (err error) {
-	u.mutex.Lock()
-	defer u.mutex.Unlock()
+	log.Debugf("stop called on %v", u)
 
 	if !u.IsLoaded() {
 		return ErrNotLoaded
 	}
+
+	u.Log.Println("Stopping...")
 
 	stopper, ok := u.Interface.(unit.Stopper)
 	if !ok {
