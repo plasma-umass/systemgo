@@ -1,15 +1,13 @@
-// Package target_test provides ...
-package target_test
+package system
 
 import (
 	"fmt"
 	"testing"
 
+	"github.com/golang/mock/gomock"
 	"github.com/rvolosatovs/systemgo/system"
 	"github.com/rvolosatovs/systemgo/test/mock_unit"
 	"github.com/rvolosatovs/systemgo/unit"
-	"github.com/rvolosatovs/systemgo/unit/target"
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -17,7 +15,8 @@ func TestActive(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	targ := &target.Unit{Get: func(name string) (unit.Subber, error) {
+	//targ := &Target{System:New()}
+	targ := &Target{Get: func(name string) (unit.Subber, error) {
 		u := mock_unit.NewMockInterface(ctrl)
 		switch name {
 		case "active":
@@ -53,11 +52,11 @@ func TestActive(t *testing.T) {
 }
 
 func TestStart(t *testing.T) {
-	targ := &target.Unit{}
+	targ := &Target{}
 	assert.Equal(t, targ.Start(), nil)
 }
 
 func TestStop(t *testing.T) {
-	targ := &target.Unit{}
+	targ := &Target{}
 	assert.Equal(t, targ.Stop(), nil)
 }

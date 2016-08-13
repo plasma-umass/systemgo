@@ -10,7 +10,6 @@ import (
 
 	"github.com/rvolosatovs/systemgo/unit"
 	"github.com/rvolosatovs/systemgo/unit/service"
-	"github.com/rvolosatovs/systemgo/unit/target"
 
 	log "github.com/Sirupsen/logrus"
 )
@@ -408,7 +407,7 @@ func (sys *Daemon) parse(name string) (u *Unit, err error) {
 	var v unit.Interface
 	switch filepath.Ext(name) {
 	case ".target":
-		v = &target.Unit{}
+		v = &Target{System: sys}
 	case ".service":
 		v = &service.Unit{}
 	default:
