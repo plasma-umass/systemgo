@@ -44,6 +44,10 @@ func NewUnit(v unit.Interface) (u *Unit) {
 	}
 }
 
+func (u *Unit) String() string {
+	return u.Name()
+}
+
 func (u *Unit) Path() string {
 	return u.path
 }
@@ -116,11 +120,6 @@ func (u *Unit) Status() fmt.Stringer {
 
 func (u *Unit) IsReloader() (ok bool) {
 	_, ok = u.Interface.(unit.Reloader)
-	return
-}
-
-func (u *Unit) Reload() (err error) {
-	// TODO reload transaction
 	return
 }
 
@@ -233,7 +232,19 @@ func unlinkDep(dir string, dep *Unit) (err error) {
 	return nil
 }
 
+func (u *Unit) Reload() (err error) {
+	log.WithField("u", u).Debugf("u.Reload")
+
+	tr := newTransaction()
+	if err = tr.add(reload, u, nil, true, true); err != nil {
+		return
+	}
+	return tr.Run()
+}
+
 func (u *Unit) reload() (err error) {
+	log.WithField("u", u).Debugf("u.reload")
+
 	reloader, ok := u.Interface.(unit.Reloader)
 	if !ok {
 		return ErrNoReload
@@ -242,6 +253,8 @@ func (u *Unit) reload() (err error) {
 }
 
 func (u *Unit) Start() (err error) {
+	log.WithField("u", u).Debugf("u.Start")
+
 	tr := newTransaction()
 	if err = tr.add(start, u, nil, true, true); err != nil {
 		return
@@ -250,7 +263,7 @@ func (u *Unit) Start() (err error) {
 }
 
 func (u *Unit) start() (err error) {
-	log.Debugf("start called on %v", u)
+	log.WithField("u", u).Debugf("u.start")
 
 	if !u.IsLoaded() {
 		return ErrNotLoaded
@@ -267,6 +280,8 @@ func (u *Unit) start() (err error) {
 }
 
 func (u *Unit) Stop() (err error) {
+	log.WithField("u", u).Debugf("u.Stop")
+
 	tr := newTransaction()
 	if err = tr.add(stop, u, nil, true, true); err != nil {
 		return
@@ -275,7 +290,7 @@ func (u *Unit) Stop() (err error) {
 }
 
 func (u *Unit) stop() (err error) {
-	log.Debugf("stop called on %v", u)
+	log.WithField("u", u).Debugf("u.stop")
 
 	if !u.IsLoaded() {
 		return ErrNotLoaded

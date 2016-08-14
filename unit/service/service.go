@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/rvolosatovs/systemgo/unit"
+
+	log "github.com/Sirupsen/logrus"
 )
 
 const DEFAULT_TYPE = "simple"
@@ -61,8 +63,14 @@ func Supported(typ string) (is bool) {
 	return supported[typ]
 }
 
+func (sv *Unit) String() string {
+	return sv.Service.ExecStart
+}
+
 // Define attempts to fill the sv definition by parsing r
 func (sv *Unit) Define(r io.Reader /*, errch chan<- error*/) (err error) {
+	log.WithField("r", r).Debugf("sv.Define")
+
 	def := Definition{}
 	def.Service.Type = DEFAULT_TYPE
 
@@ -95,6 +103,8 @@ func (sv *Unit) Define(r io.Reader /*, errch chan<- error*/) (err error) {
 
 // Start executes the command specified in service definition
 func (sv *Unit) Start() (err error) {
+	log.WithField("sv", sv).Debugf("sv.Start")
+
 	switch sv.Definition.Service.Type {
 	case "simple":
 		if err = sv.Cmd.Start(); err == nil {
@@ -110,6 +120,8 @@ func (sv *Unit) Start() (err error) {
 
 // Stop stops execution of the command specified in service definition
 func (sv *Unit) Stop() (err error) {
+	log.WithField("sv", sv).Debugf("sv.Stop")
+
 	if sv.Cmd.Process == nil {
 		return unit.ErrNotStarted
 	}
@@ -119,6 +131,8 @@ func (sv *Unit) Stop() (err error) {
 
 // Sub reports the sub status of a service
 func (sv *Unit) Sub() string {
+	log.WithField("sv", sv).Debugf("sv.Sub")
+
 	if sv.Cmd == nil {
 		panic(unit.ErrNotParsed)
 	}
@@ -146,6 +160,8 @@ func (sv *Unit) Sub() string {
 
 // Active reports activation status of a service
 func (sv *Unit) Active() unit.Activation {
+	log.WithField("sv", sv).Debugf("sv.Active")
+
 	// based of Systemd transtition table found in https://goo.gl/oEjikJ
 	switch sv.Sub() {
 	case dead:
