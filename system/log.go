@@ -10,8 +10,6 @@ import (
 // Byte size of log contents read to buffer
 const BUFFER_SIZE = 10000
 
-var debug bool
-
 type errorHook struct {
 	Source string
 }
