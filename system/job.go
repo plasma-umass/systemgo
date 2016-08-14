@@ -47,6 +47,11 @@ const (
 )
 
 func newJob(typ jobType, u *Unit) (j *job) {
+	log.WithFields(log.Fields{
+		"typ": typ,
+		"u":   u,
+	}).Debugf("newJob")
+
 	return &job{
 		typ:  typ,
 		unit: u,
@@ -105,6 +110,9 @@ func (j *job) State() (st jobState) {
 }
 
 func (j *job) Run() (err error) {
+	e := log.WithField("job", j)
+	e.Debugf("j.Run()")
+
 	j.waitch = make(chan struct{})
 
 	j.unit.job = j
@@ -113,48 +121,33 @@ func (j *job) Run() (err error) {
 	for dep := range j.requires {
 		wg.Add(1)
 		go func(dep *job) {
-			defer wg.Done()
-			log.Debugf("%v waiting for %v", j, dep)
+			e.Debugf("waiting for %s", dep)
+
 			dep.Wait()
 			if !dep.Success() {
-				j.unit.Log.Printf("%v failed", j)
+				j.unit.Log.Errorf("%s failed", j)
 				err = ErrDepFail
 			}
+			wg.Done()
 		}(dep)
 	}
-
 	wg.Wait()
+
+	if err != nil {
+		return
+	}
 
 	j.err = j.execute()
 
-	j.unit.job = nil
-
 	close(j.waitch)
 	j.waitch = nil
+
+	j.unit.job = nil
 
 	return
 }
 
 func (j *job) execute() (err error) {
-	wg := &sync.WaitGroup{}
-	for dep := range j.requires {
-		if !dep.Success() {
-			wg.Add(1)
-			go func() {
-				dep.Wait()
-				if !dep.Success() {
-					err = dep.err
-				}
-				wg.Done()
-			}()
-		}
-	}
-
-	wg.Wait()
-	if err != nil {
-		return
-	}
-
 	switch j.typ {
 	case start:
 		err = j.unit.start()
