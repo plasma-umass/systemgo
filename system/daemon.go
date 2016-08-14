@@ -384,7 +384,11 @@ func (sys *Daemon) Load(name string) (u *Unit, err error) {
 			}
 			return nil, err
 		}
-		defer file.Close()
+		// Commented out because of gopherjs bug,
+		// which breaks systemgo on Browsix
+		// See https://goo.gl/AycBTv
+		//
+		//defer file.Close()
 
 		// Check if a unit for name had already been created
 		if u, err = sys.Unit(name); err != nil {
@@ -411,6 +415,7 @@ func (sys *Daemon) Load(name string) (u *Unit, err error) {
 		}
 		if err != nil {
 			u.Log.Errorf("%s", err)
+			file.Close()
 			return u, err
 		}
 
@@ -424,11 +429,12 @@ func (sys *Daemon) Load(name string) (u *Unit, err error) {
 				u.Log.Errorf("Error parsing definition: %s", err)
 			}
 			u.loaded = unit.Error
+			file.Close()
 			return u, err
 		}
 
 		u.loaded = unit.Loaded
-		return u, nil
+		return u, file.Close()
 	}
 
 	return nil, ErrNotFound
