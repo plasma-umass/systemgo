@@ -2,97 +2,46 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
-	"os"
+	"time"
 
 	log "github.com/Sirupsen/logrus"
-	"github.com/spf13/viper"
 
+	"github.com/rvolosatovs/systemgo/config"
 	"github.com/rvolosatovs/systemgo/system"
 	"github.com/rvolosatovs/systemgo/systemctl"
 )
 
+// Initializes the system, sets the default paths, as specified in configuration and attempts to start the default target, falls back to "rescue.target", if it fails
 func main() {
-	Boot()
-	Serve()
-}
+	// Initialize system
+	System = system.New()
+	System.SetPaths(config.Paths...)
 
-var Conf Configuration
+	go Serve()
 
-// TODO: introduce proper configuration
-type Configuration struct {
-	// Default target
-	Target string `yaml:omitempty`
+	// Start the default target
+	if err := System.Start(config.Target); err != nil {
+		log.Errorf("Error starting default target %s: %s", config.Target, err)
+		if err = System.Start(config.RESCUE_TARGET); err != nil {
+			log.Errorf("Error starting rescue target %s: %s", config.RESCUE_TARGET, err)
+		}
+	}
 
-	// Paths to search for unit files
-	Paths []string `yaml:omitempty`
-
-	// Debug
-	Debug bool `yaml:omitempty`
-
-	// Port for system daemon to listen on
-	Port port `yaml:omitempty`
-}
-
-type port int
-
-func (p port) String() string {
-	return fmt.Sprintf(":%v", int(p))
+	select {}
 }
 
 // Instance of a system
 var System *system.Daemon
 
-func init() {
-	viper.SetConfigName("systemgo")
-
-	viper.AddConfigPath(".")
-	if os.Getenv("XDG_CONFIG_HOME") != "" {
-		viper.AddConfigPath("$XDG_CONFIG_HOME/systemgo")
-	}
-	viper.AddConfigPath("/etc/systemgo")
-
-	if err := viper.ReadInConfig(); err != nil {
-		log.WithField("path", viper.ConfigFileUsed()).Errorf("Error reading config: %s", err)
-	}
-	log.WithField("path", viper.ConfigFileUsed()).Infof("Found configuration file")
-
-	viper.SetDefault("port", 28357)
-	viper.SetDefault("target", "default.target")
-	viper.SetDefault("paths", []string{
-		"/etc/systemd/system", "/lib/systemd/system",
-	})
-	viper.SetDefault("debug", false)
-
-	if err := viper.Unmarshal(&Conf); err != nil {
-		log.Errorf("Error parsing %s: %s", viper.ConfigFileUsed(), err)
-	}
-
-	if Conf.Debug {
-		log.SetLevel(log.DebugLevel)
-	}
-}
-
-// Boot initializes the system, sets the default paths, as specified in configuration and attempts to start the default target, falls back to "rescue.target", if it fails
-func Boot() {
-	// Initialize system
-	System = system.New()
-	System.SetPaths(Conf.Paths...)
-
-	// Start the default target
-	if err := System.Start(Conf.Target); err != nil {
-		System.Log.Errorf("Error starting default target %s: %s", Conf.Target, err)
-		if err = System.Start("rescue.target"); err != nil {
-			System.Log.Errorf("Error starting rescue target %s: %s", "rescue.target", err)
-		}
-	}
-}
-
 // Listen for systemctl requests
 func Serve() {
-	if err := listenHTTP(Conf.Port.String()); err != nil {
-		log.Fatalf("Error starting server on %s: %s", Conf.Port, err)
+	for {
+		if err := listenHTTP(config.Port.String()); err != nil {
+			log.Errorf("Error listening on %v: %s", config.Port, err)
+		}
+		log.Infof("Retrying in %v seconds", config.Retry)
+		time.Sleep(config.Retry)
 	}
 }
 
@@ -124,5 +73,6 @@ func listenHTTP(addr string) (err error) {
 		}(handler)
 	}
 
+	log.Infof("Listening on http://localhost%s", config.Port)
 	return http.ListenAndServe(addr, server)
 }
