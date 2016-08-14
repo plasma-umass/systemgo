@@ -190,7 +190,7 @@ func (u *Unit) addRequiresDep(dep *Unit) (err error) {
 }
 
 func linkDep(dir string, dep *Unit) (err error) {
-	if err = os.Mkdir(dir, 0755); err != nil && err != os.ErrExist {
+	if err = os.Mkdir(dir, 0755); err != nil && !os.IsExist(err) {
 		return err
 	}
 
@@ -227,7 +227,7 @@ func (u *Unit) removeRequiresDep(dep *Unit) (err error) {
 }
 
 func unlinkDep(dir string, dep *Unit) (err error) {
-	if err = os.Remove(filepath.Join(dir, dep.Name())); err != nil && err != os.ErrNotExist {
+	if err = os.Remove(filepath.Join(dir, dep.Name())); err != nil && !os.IsNotExist(err) {
 		return
 	}
 	return nil

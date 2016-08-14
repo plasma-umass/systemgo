@@ -176,6 +176,8 @@ func (sys *Daemon) jobCount() (n int) {
 //}
 
 func (sys *Daemon) Start(names ...string) (err error) {
+	log.WithField("names", names).Debugf("sys.Start")
+
 	var tr *transaction
 	if tr, err = sys.newTransaction(start, names); err != nil {
 		return
@@ -184,6 +186,8 @@ func (sys *Daemon) Start(names ...string) (err error) {
 }
 
 func (sys *Daemon) Stop(names ...string) (err error) {
+	log.WithField("names", names).Debugf("sys.Stop")
+
 	var tr *transaction
 	if tr, err = sys.newTransaction(stop, names); err != nil {
 		return
@@ -192,6 +196,8 @@ func (sys *Daemon) Stop(names ...string) (err error) {
 }
 
 func (sys *Daemon) Isolate(names ...string) (err error) {
+	log.WithField("names", names).Debugf("sys.Isolate")
+
 	var tr *transaction
 	if tr, err = sys.newTransaction(start, names); err != nil {
 		return
@@ -210,6 +216,8 @@ func (sys *Daemon) Isolate(names ...string) (err error) {
 }
 
 func (sys *Daemon) Restart(names ...string) (err error) {
+	log.WithField("names", names).Debugf("sys.Restart")
+
 	var tr *transaction
 	if tr, err = sys.newTransaction(restart, names); err != nil {
 		return
@@ -218,6 +226,8 @@ func (sys *Daemon) Restart(names ...string) (err error) {
 }
 
 func (sys *Daemon) Reload(names ...string) (err error) {
+	log.WithField("names", names).Debugf("sys.Reload")
+
 	var tr *transaction
 	if tr, err = sys.newTransaction(reload, names); err != nil {
 		return
@@ -244,8 +254,9 @@ func (sys *Daemon) newTransaction(typ jobType, names []string) (tr *transaction,
 	return
 }
 
-// TODO
 func (sys *Daemon) Enable(names ...string) (err error) {
+	log.WithField("names", names).Debugf("sys.Enable")
+
 	return sys.getAndExecute(names, func(u *Unit, gerr error) error {
 		if gerr != nil {
 			return gerr
@@ -255,8 +266,9 @@ func (sys *Daemon) Enable(names ...string) (err error) {
 	})
 }
 
-// TODO
 func (sys *Daemon) Disable(names ...string) (err error) {
+	log.WithField("names", names).Debugf("sys.Disable")
+
 	return sys.getAndExecute(names, func(u *Unit, gerr error) error {
 		if gerr != nil {
 			return gerr
@@ -277,6 +289,8 @@ func (sys *Daemon) getAndExecute(names []string, fn func(*Unit, error) error) (e
 
 // Units returns a slice of all units created
 func (sys *Daemon) Units() (units []*Unit) {
+	log.Debugf("sys.Units")
+
 	unitSet := map[*Unit]struct{}{}
 	for _, u := range sys.units {
 		unitSet[u] = struct{}{}
@@ -292,6 +306,8 @@ func (sys *Daemon) Units() (units []*Unit) {
 // Unit looks up the unit name in the internal hasmap of loaded units and returns it
 // If error is returned, it will be error from sys.Load(name)
 func (sys *Daemon) Unit(name string) (u *Unit, err error) {
+	log.WithField("name", name).Debugf("sys.Unit")
+
 	var ok bool
 	if u, ok = sys.units[name]; !ok {
 		return nil, ErrNotFound
@@ -303,6 +319,8 @@ func (sys *Daemon) Unit(name string) (u *Unit, err error) {
 // sys.Load(name) if it can not be found
 // If error is returned, it will be error from sys.Load(name)
 func (sys *Daemon) Get(name string) (u *Unit, err error) {
+	log.WithField("name", name).Debugf("sys.Get")
+
 	if u, err = sys.Unit(name); err != nil || !u.IsLoaded() {
 		return sys.Load(name)
 	}
@@ -310,32 +328,39 @@ func (sys *Daemon) Get(name string) (u *Unit, err error) {
 }
 
 func (sys *Daemon) Supervise(name string, v unit.Interface) (u *Unit, err error) {
-	if _, exists := sys.units[name]; exists {
+	log.WithFields(log.Fields{
+		"name":      name,
+		"interface": v,
+	}).Debugf("sys.Supervise")
+
+	if u, err = sys.Unit(name); err == nil {
 		return nil, ErrExists
 	}
 
+	return sys.newUnit(name, v), nil
+}
+
+func (sys *Daemon) newUnit(name string, v unit.Interface) (u *Unit) {
+	log.WithFields(log.Fields{
+		"name":      name,
+		"interface": v,
+	}).Debugf("sys.newUnit")
+
 	u = NewUnit(v)
+
 	u.System = sys
 
 	u.name = name
 	sys.units[name] = u
 
-	log.WithFields(log.Fields{
-		"unit": name,
-	}).Debugf("Created new *Unit")
-
 	return
 }
 
+// TODO: don't export
 // Load searches for name in configured paths, parses it, and either overwrites the definition of already
 // created Unit or creates a new one
 func (sys *Daemon) Load(name string) (u *Unit, err error) {
-	log.WithFields(log.Fields{
-		"name": name,
-	}).Debugln("sys.Load called")
-
-	var parsed bool
-	u, parsed = sys.units[name]
+	log.WithField("name", name).Debugln("sys.Load")
 
 	if !Supported(name) {
 		return nil, ErrUnknownType
@@ -361,17 +386,24 @@ func (sys *Daemon) Load(name string) (u *Unit, err error) {
 		}
 		defer file.Close()
 
-		if !parsed {
-			if u, err = sys.parse(path); err != nil {
-				return
+		// Check if a unit for name had already been created
+		if u, err = sys.Unit(name); err != nil {
+			// If not - create a new one
+			var v unit.Interface
+			switch filepath.Ext(name) {
+			case ".target":
+				v = &Target{System: sys}
+			case ".service":
+				v = &service.Unit{}
+			default:
+				panic("Trying to load an unsupported unit type")
 			}
 
-			if name != path {
-				sys.units[path] = u
-			}
+			u = sys.newUnit(name, v)
 		}
 
 		u.path = path
+		sys.units[path] = u
 
 		var info os.FileInfo
 		if info, err = file.Stat(); err == nil && info.IsDir() {
@@ -396,25 +428,10 @@ func (sys *Daemon) Load(name string) (u *Unit, err error) {
 		}
 
 		u.loaded = unit.Loaded
-
-		return u, err
+		return u, nil
 	}
 
 	return nil, ErrNotFound
-}
-
-func (sys *Daemon) parse(name string) (u *Unit, err error) {
-	var v unit.Interface
-	switch filepath.Ext(name) {
-	case ".target":
-		v = &Target{System: sys}
-	case ".service":
-		v = &service.Unit{}
-	default:
-		panic("Trying to load an unsupported unit type")
-	}
-
-	return sys.Supervise(name, v)
 }
 
 // pathset returns a slice of paths to definitions of supported unit types found in path specified
