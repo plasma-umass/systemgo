@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -26,6 +27,29 @@ func main() {
 		if err = System.Start(config.RESCUE_TARGET); err != nil {
 			log.Errorf("Error starting rescue target %s: %s", config.RESCUE_TARGET, err)
 		}
+	}
+
+	if log.GetLevel() == log.DebugLevel {
+		go func() {
+			for range time.Tick(5 * time.Second) {
+				for _, u := range System.Units() {
+					st, err := System.StatusOf(u.Name())
+					if err != nil {
+						panic(err)
+					}
+					fmt.Println("********************************************************************************")
+					fmt.Println("\t\t", u.Name())
+					fmt.Println("********************************************************************************")
+					fmt.Printf("->Status:\n%s\n", st)
+					fmt.Println("--------------------------------------------------------------------------------")
+					fmt.Printf("->Unit:\n%+v\n", u)
+					fmt.Println("********************************************************************************")
+				}
+				fmt.Println("********************************************************************************")
+				fmt.Println("********************************************************************************")
+				fmt.Println("********************************************************************************")
+			}
+		}()
 	}
 
 	select {}
