@@ -26,7 +26,7 @@ func newTransaction() (tr *transaction) {
 }
 
 func (tr *transaction) Run() (err error) {
-	log.Debugf("tr.Run")
+	log.WithField("transaction", tr).Debugf("tr.Run")
 
 	if err = tr.merge(); err != nil {
 		return
@@ -37,9 +37,8 @@ func (tr *transaction) Run() (err error) {
 		return
 	}
 
-	log.Debugf("ordering: %s", ordering)
-
 	for _, j := range ordering {
+		log.Debugf("dispatching job for %s", j.unit.Name())
 		go j.Run()
 	}
 	return
@@ -272,7 +271,7 @@ func (tr *transaction) order() (ordering []*job, err error) {
 	g := newGraph()
 
 	for u, j := range tr.merged {
-		log.Debugf("Checking after of %s...", j)
+		log.Debugf("Checking after of %s...", j.unit.Name())
 		for _, depname := range u.After() {
 			var dep *Unit
 			if dep, err = u.System.Unit(depname); err != nil {
@@ -286,7 +285,7 @@ func (tr *transaction) order() (ordering []*job, err error) {
 			}
 		}
 
-		log.Debugf("Checking before of %s...", j)
+		log.Debugf("Checking before of %s...", j.unit.Name())
 		for _, depname := range u.Before() {
 			var dep *Unit
 			if dep, err = u.System.Unit(depname); err != nil {
@@ -343,9 +342,9 @@ func (g *graph) order(j *job) (err error) {
 	for depJob := range j.after {
 		if err = g.order(depJob); err != nil {
 			if err == errBlank {
-				return fmt.Errorf("%s\n", depJob)
+				return fmt.Errorf("%s\n", depJob.unit.Name())
 			}
-			return fmt.Errorf("%s\n%s depends on %s", j, j, err)
+			return fmt.Errorf("%v\n%s depends on %s", j.unit.Name(), j.unit.Name(), err)
 		}
 	}
 

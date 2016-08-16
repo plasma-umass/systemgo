@@ -2,7 +2,6 @@ package system
 
 import (
 	"errors"
-	"fmt"
 	"sync"
 
 	log "github.com/Sirupsen/logrus"
@@ -69,9 +68,9 @@ func newJob(typ jobType, u *Unit) (j *job) {
 	}
 }
 
-func (j *job) String() string {
-	return fmt.Sprintf("%s job for %s", j.typ, j.unit.Name())
-}
+//func (j *job) String() string {
+//return fmt.Sprintf("%s job for %s", j.typ, j.unit.Name())
+//}
 
 func (j *job) IsRunning() bool {
 	return j.waitch != nil
@@ -110,7 +109,10 @@ func (j *job) State() (st jobState) {
 }
 
 func (j *job) Run() (err error) {
-	e := log.WithField("job", j)
+	e := log.WithFields(log.Fields{
+		"unit": j.unit.Name(),
+		"job":  j.typ,
+	})
 	e.Debugf("j.Run()")
 
 	j.waitch = make(chan struct{})
@@ -121,23 +123,26 @@ func (j *job) Run() (err error) {
 	for dep := range j.requires {
 		wg.Add(1)
 		go func(dep *job) {
-			e.Debugf("waiting for %s", dep)
+			e.Debugf("waiting for %s", dep.unit.Name())
 
 			dep.Wait()
 			if !dep.Success() {
-				j.unit.Log.Errorf("%s failed", j)
+				j.unit.Log.Errorf("%s failed to %s", dep.unit.Name(), dep.typ)
 				err = ErrDepFail
 			}
 			wg.Done()
 		}(dep)
 	}
 	wg.Wait()
+	e.Debugf("dependencies finished loading")
 
 	if err != nil {
+		e.Debugf("failed: %s", err)
 		return
 	}
 
-	j.err = j.execute()
+	e.Debugf("j.execute()")
+	err = j.execute()
 
 	close(j.waitch)
 	j.waitch = nil
@@ -164,6 +169,7 @@ func (j *job) execute() (err error) {
 		panic(ErrUnknownType)
 	}
 	j.executed = true
+	j.err = err
 
 	return
 }

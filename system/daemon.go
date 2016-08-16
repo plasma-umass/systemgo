@@ -125,21 +125,7 @@ func (sys *Daemon) StatusOf(name string) (st unit.Status, err error) {
 		return
 	}
 
-	st = unit.Status{
-		Load: unit.LoadStatus{
-			Path:   u.Path(),
-			Loaded: u.Loaded(),
-			State:  unit.Enabled,
-		},
-		Activation: unit.ActivationStatus{
-			State: u.Active(),
-			Sub:   u.Sub(),
-		},
-	}
-
-	st.Log, err = ioutil.ReadAll(u.Log)
-
-	return
+	return u.Status(), nil
 }
 
 func (sys *Daemon) failedCount() (n int) {

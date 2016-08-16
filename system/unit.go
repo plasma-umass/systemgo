@@ -2,7 +2,7 @@ package system
 
 import (
 	"errors"
-	"fmt"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sync"
@@ -44,9 +44,9 @@ func NewUnit(v unit.Interface) (u *Unit) {
 	}
 }
 
-func (u *Unit) String() string {
-	return u.Name()
-}
+//func (u *Unit) String() string {
+//return u.Name()
+//}
 
 func (u *Unit) Path() string {
 	return u.path
@@ -96,7 +96,7 @@ func (u *Unit) Sub() string {
 	return u.Interface.Sub()
 }
 
-func (u *Unit) Status() fmt.Stringer {
+func (u *Unit) Status() unit.Status {
 	st := unit.Status{
 		Load: unit.LoadStatus{
 			Path:   u.Path(),
@@ -108,6 +108,12 @@ func (u *Unit) Status() fmt.Stringer {
 			Sub:   u.Sub(),
 		},
 	}
+
+	var err error
+	if st.Log, err = ioutil.ReadAll(u.Log); err != nil {
+		u.Log.Errorf("Error reading log: %s", err)
+	}
+
 	// TODO deal with different unit types requiring different status
 	// something like u.Interface.HasX() ?
 	switch u.Interface.(type) {
@@ -253,7 +259,7 @@ func (u *Unit) reload() (err error) {
 }
 
 func (u *Unit) Start() (err error) {
-	log.WithField("u", u).Debugf("u.Start")
+	log.WithField("unit", u.Name()).Debugf("u.Start")
 
 	tr := newTransaction()
 	if err = tr.add(start, u, nil, true, true); err != nil {
@@ -263,7 +269,8 @@ func (u *Unit) Start() (err error) {
 }
 
 func (u *Unit) start() (err error) {
-	log.WithField("u", u).Debugf("u.start")
+	e := log.WithField("unit", u.Name())
+	e.Debugf("u.start")
 
 	if !u.IsLoaded() {
 		return ErrNotLoaded
@@ -273,9 +280,11 @@ func (u *Unit) start() (err error) {
 
 	starter, ok := u.Interface.(unit.Starter)
 	if !ok {
+		e.Debugf("can not be started")
 		return nil
 	}
 
+	e.Debugf("calling start on underlying inteface")
 	return starter.Start()
 }
 
