@@ -1,1 +1,4 @@
-Debug: true
+debug: true
+port: 28357
+paths:
+    - test
