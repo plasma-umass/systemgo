@@ -3,13 +3,17 @@ package service
 
 import (
 	"io"
+	"os"
 	"os/exec"
 	"strings"
+	"sync"
 
 	"github.com/rvolosatovs/systemgo/unit"
 
 	log "github.com/Sirupsen/logrus"
 )
+
+var dirLock sync.Mutex
 
 const DEFAULT_TYPE = "simple"
 
@@ -53,9 +57,11 @@ type Definition struct {
 	Service struct {
 		Type                            string
 		ExecStart, ExecStop, ExecReload string
-		PIDFile                         string
-		Restart                         string
-		RemainAfterExit                 bool
+		//Restart                         string
+		//RestartSec                      int
+		RemainAfterExit  bool
+		WorkingDirectory string
+		//PIDFile          string
 	}
 }
 
@@ -63,9 +69,9 @@ func Supported(typ string) (is bool) {
 	return supported[typ]
 }
 
-func (sv *Unit) String() string {
-	return sv.Service.ExecStart
-}
+//func (sv *Unit) String() string {
+//return sv.Service.ExecStart
+//}
 
 // Define attempts to fill the sv definition by parsing r
 func (sv *Unit) Define(r io.Reader /*, errch chan<- error*/) (err error) {
@@ -103,7 +109,26 @@ func (sv *Unit) Define(r io.Reader /*, errch chan<- error*/) (err error) {
 
 // Start executes the command specified in service definition
 func (sv *Unit) Start() (err error) {
-	log.WithField("sv", sv).Debugf("sv.Start")
+	e := log.WithField("ExecStart", sv.Definition.Service.ExecStart)
+
+	e.Debug("sv.Start")
+	defer e.WithField("error", err).Debug("started")
+
+	if dir := sv.Definition.Service.WorkingDirectory; dir != "" {
+		olddir, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+
+		dirLock.Lock()
+		defer dirLock.Unlock()
+
+		err = os.Chdir(dir)
+		if err != nil {
+			return err
+		}
+		defer os.Chdir(olddir)
+	}
 
 	switch sv.Definition.Service.Type {
 	case "simple":
@@ -120,22 +145,18 @@ func (sv *Unit) Start() (err error) {
 
 // Stop stops execution of the command specified in service definition
 func (sv *Unit) Stop() (err error) {
-	log.WithField("sv", sv).Debugf("sv.Stop")
-
-	if sv.Cmd.Process == nil {
-		return unit.ErrNotStarted
+	if cmd := strings.Fields(sv.Definition.Service.ExecStop); len(cmd) > 0 {
+		return exec.Command(cmd[0], cmd[1:]...).Run()
 	}
-
-	return sv.Process.Kill()
+	if sv.Cmd.Process != nil {
+		return sv.Cmd.Process.Kill()
+	}
+	return nil
 }
 
 // Sub reports the sub status of a service
 func (sv *Unit) Sub() string {
 	log.WithField("sv", sv).Debugf("sv.Sub")
-
-	if sv.Cmd == nil {
-		panic(unit.ErrNotParsed)
-	}
 
 	switch {
 	case sv.Cmd.Process == nil:
