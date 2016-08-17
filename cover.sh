@@ -28,7 +28,7 @@ generate_cover_data() {
     mkdir -p "$workdir"
 
     # For each package with test files, run with full coverage (including other packages)
-    go list -f '{{if gt (len .TestGoFiles) 0}}"go test -covermode='${mode}' -coverprofile='${workdir}'/{{.Name}}.coverprofile -coverpkg='${pkg_seq}' {{.ImportPath}}"{{end}}' ${pkgs} | xargs -I {} bash -c {}
+    go list -f '{{if gt (len .TestGoFiles) 0}}"go test -v -covermode='${mode}' -coverprofile='${workdir}'/{{.Name}}.coverprofile -coverpkg='${pkg_seq}' {{.ImportPath}}"{{end}}' ${pkgs} | xargs -I {} bash -c {}
 
     # Merge the generated cover profiles into a single file
     gocovmerge `ls $workdir/*.coverprofile` > $profile
