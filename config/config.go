@@ -51,6 +51,7 @@ func init() {
 	viper.AutomaticEnv()
 
 	viper.SetConfigName("systemgo")
+	viper.SetConfigType("yaml")
 
 	viper.AddConfigPath(".")
 	if os.Getenv("XDG_CONFIG_HOME") != "" {
@@ -59,7 +60,12 @@ func init() {
 	viper.AddConfigPath("/etc/systemgo")
 
 	if err := viper.ReadInConfig(); err != nil {
-		log.Fatalf("Error reading %s: %s", viper.ConfigFileUsed(), err)
+		switch err.(type) {
+		case viper.ConfigFileNotFoundError:
+			log.Warn("Config file not found, using defaults")
+		case viper.ConfigParseError:
+			log.Errorf("Error parsing %s: %s, using defaults", viper.ConfigFileUsed(), err)
+		}
 	}
 	log.Infof("Found configuration file at %s", viper.ConfigFileUsed())
 
