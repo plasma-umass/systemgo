@@ -1,13 +1,14 @@
 package system
 
 import (
-	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
+	log "github.com/Sirupsen/logrus"
 	"github.com/golang/mock/gomock"
 	"github.com/rvolosatovs/systemgo/test/mock_unit"
 	"github.com/rvolosatovs/systemgo/unit"
@@ -97,43 +98,67 @@ func TestPathset(t *testing.T) {
 }
 
 func TestStart(t *testing.T) {
+	defer log.SetLevel(log.GetLevel())
+	log.SetLevel(log.DebugLevel)
+
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	abc := map[string]*mockUnit{
+	mocks := map[string]*mockUnit{
 		"a": newMock(ctrl),
 		"b": newMock(ctrl),
 		"c": newMock(ctrl),
 	}
 
-	abc["a"].MockInterface.EXPECT().Requires().Return([]string{"b", "c"}).Times(1)
-	abc["a"].MockInterface.EXPECT().After().Return([]string{"b", "c"}).Times(1)
-
-	abc["b"].MockInterface.EXPECT().Requires().Return([]string{"c"}).Times(1)
-	abc["b"].MockInterface.EXPECT().After().Return([]string{"c"}).Times(1)
-
-	empty(abc["a"], "wants", "before", "conflicts")
-	empty(abc["b"], "wants", "before", "conflicts")
-	empty(abc["c"], "wants", "before", "conflicts", "after", "requires")
-
-	for mocks, seq := range map[*map[string]*mockUnit][]string{
-		&abc: {"a", "b", "c"},
-	} {
-		sys := New()
-
-		for name, m := range *mocks {
-			u, err := sys.Supervise(name, m)
-			require.NoError(t, err)
-
-			u.loaded = unit.Loaded
-		}
-
-		sequence(*mocks, seq)
-
-		assert.NoError(t, sys.Start("a"), "sys.Start("+"a"+")")
-
-		time.Sleep(time.Second)
+	sequence := []string{
+		"a", "b", "c",
 	}
+
+	empty(mocks["a"], "wants", "before", "conflicts", "after", "requires")
+	empty(mocks["b"], "wants", "before", "conflicts")
+	empty(mocks["c"], "wants", "before", "conflicts")
+
+	mocks["b"].MockInterface.EXPECT().After().Return([]string{"a"}).Times(1)
+	mocks["b"].MockInterface.EXPECT().Requires().Return([]string{"a"}).Times(1)
+
+	mocks["c"].MockInterface.EXPECT().After().Return([]string{"b", "a"}).Times(1)
+	mocks["c"].MockInterface.EXPECT().Requires().Return([]string{"b", "a"}).Times(1)
+
+	sys := New()
+
+	units := map[string]*Unit{}
+	for name, m := range mocks {
+		u, err := sys.Supervise(name, m)
+		require.NoError(t, err)
+
+		u.loaded = unit.Loaded
+
+		units[name] = u
+	}
+
+	calls := make([]*gomock.Call, len(sequence))
+	for i, name := range sequence {
+		calls[i] = mocks[name].MockStarter.EXPECT().Start().Return(nil).Times(1)
+	}
+	gomock.InOrder(calls...)
+
+	assert.NoError(t, sys.Start("c"), "sys.Start("+"c"+")")
+
+	wg := &sync.WaitGroup{}
+	for _, u := range units {
+		wg.Add(1)
+		go func(u *Unit) {
+			for u.job == nil {
+				log.Warnf("%s job still nil", u.Name())
+				time.Sleep(100 * time.Millisecond)
+			}
+			log.Infof("Waiting for %s job to finish", u.Name())
+			u.job.Wait()
+			log.Infof("%s job finished", u.Name())
+			wg.Done()
+		}(u)
+	}
+	wg.Wait()
 }
 
 func TestStop(t *testing.T) {
@@ -144,27 +169,11 @@ func TestStop(t *testing.T) {
 
 	sys := New()
 
-	m.MockInterface.EXPECT().Conflicts().Return([]string{}).Times(1)
-
 	u, err := sys.Supervise("TestStop", m)
 	u.loaded = unit.Loaded
 	require.NoError(t, err)
 
-	assert.Error(t, sys.Stop(u.Name()))
 	assert.NoError(t, sys.Stop(u.Name()))
-}
-
-func sequence(units map[string]*mockUnit, names []string) *gomock.Call {
-	switch len(names) {
-	case 0:
-		return nil
-	case 1:
-		fmt.Printf("<-%s\n", names[0])
-		return units[names[0]].MockStarter.EXPECT().Start().Return(nil).Times(1)
-	default:
-		fmt.Printf("<-%s", names[0])
-		return units[names[0]].MockStarter.EXPECT().Start().Return(nil).After(sequence(units, names[1:])).Times(1)
-	}
 }
 
 func empty(m *mockUnit, methods ...string) {
