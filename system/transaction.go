@@ -102,7 +102,7 @@ func (tr *transaction) add(typ jobType, u *Unit, parent *job, required, anchor b
 		}
 	}
 
-	if isNew {
+	if isNew && typ != stop {
 		for _, name := range u.Conflicts() {
 			dep, err := u.System.Get(name)
 			if err != nil {
@@ -271,6 +271,11 @@ func (tr *transaction) order() (ordering []*job, err error) {
 	g := newGraph()
 
 	for u, j := range tr.merged {
+		if j.typ == stop {
+			// TODO Introduce stop job ordering(if needed)
+			continue
+		}
+
 		log.Debugf("Checking after of %s...", j.unit.Name())
 		for _, depname := range u.After() {
 			var dep *Unit

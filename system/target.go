@@ -29,7 +29,7 @@ func (targ *Target) Active() unit.Activation {
 	encountered := map[unit.Activation]bool{}
 
 	for _, name := range targ.Definition.Unit.Requires {
-		dep, err := targ.System.Get(name)
+		dep, err := targ.System.Unit(name)
 		if err != nil {
 			return unit.Inactive
 		}

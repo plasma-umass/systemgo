@@ -69,20 +69,22 @@ func (u *Unit) IsLoaded() bool {
 }
 
 func (u *Unit) Active() (st unit.Activation) {
-	switch u.Sub() {
-	case starting:
-		return unit.Activating
-	case stopping:
-		return unit.Deactivating
-	case reloading:
-		return unit.Reloading
-	default:
-		return u.Interface.Active()
+	if u.jobRunning() {
+		switch u.job.typ {
+		case start:
+			return unit.Activating
+		case stop:
+			return unit.Deactivating
+		case reload:
+			return unit.Reloading
+		}
 	}
+
+	return u.Interface.Active()
 }
 
 func (u *Unit) Sub() string {
-	if u.job != nil && u.job.IsRunning() {
+	if u.jobRunning() {
 		switch u.job.typ {
 		case start:
 			return starting
@@ -94,6 +96,10 @@ func (u *Unit) Sub() string {
 	}
 
 	return u.Interface.Sub()
+}
+
+func (u *Unit) jobRunning() bool {
+	return u.job != nil && u.job.IsRunning()
 }
 
 func (u *Unit) Status() unit.Status {
@@ -271,6 +277,7 @@ func (u *Unit) Start() (err error) {
 func (u *Unit) start() (err error) {
 	e := log.WithField("unit", u.Name())
 	e.Debugf("u.start")
+	defer e.Debug("started")
 
 	if !u.IsLoaded() {
 		return ErrNotLoaded
@@ -280,11 +287,11 @@ func (u *Unit) start() (err error) {
 
 	starter, ok := u.Interface.(unit.Starter)
 	if !ok {
-		e.Debugf("can not be started")
+		e.Debugf("Interface is not unit.Starter")
 		return nil
 	}
 
-	e.Debugf("calling start on underlying inteface")
+	e.Debugf("Interface.Start")
 	return starter.Start()
 }
 

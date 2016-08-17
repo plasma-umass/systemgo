@@ -39,6 +39,7 @@ type Daemon struct {
 	mutex sync.Mutex
 }
 
+// New returns *Daemon ready to use
 func New() (sys *Daemon) {
 	return &Daemon{
 		units: make(map[string]*Unit),
@@ -49,10 +50,12 @@ func New() (sys *Daemon) {
 	}
 }
 
+// Paths returns paths, which get searched for unit files by sys(first path gets searched first)
 func (sys *Daemon) Paths() (paths []string) {
 	return sys.paths
 }
 
+// SetPaths sets paths, which get searched for unit files by sys(first path gets searched first)
 func (sys *Daemon) SetPaths(paths ...string) {
 	sys.mutex.Lock()
 	defer sys.mutex.Unlock()
@@ -60,6 +63,7 @@ func (sys *Daemon) SetPaths(paths ...string) {
 	sys.paths = paths
 }
 
+// Since returns time, when sys was created
 func (sys *Daemon) Since() (t time.Time) {
 	return sys.since
 }
@@ -161,6 +165,7 @@ func (sys *Daemon) jobCount() (n int) {
 //return
 //}
 
+// Start gets names from internal hashmap, creates a new start transaction and runs it
 func (sys *Daemon) Start(names ...string) (err error) {
 	log.WithField("names", names).Debugf("sys.Start")
 
@@ -171,6 +176,7 @@ func (sys *Daemon) Start(names ...string) (err error) {
 	return tr.Run()
 }
 
+// Stop gets names from internal hashmap, creates a new stop transaction and runs it
 func (sys *Daemon) Stop(names ...string) (err error) {
 	log.WithField("names", names).Debugf("sys.Stop")
 
@@ -181,6 +187,8 @@ func (sys *Daemon) Stop(names ...string) (err error) {
 	return tr.Run()
 }
 
+// Isolate gets names from internal hashmap, creates a new start transaction, adds a stop job
+// for each unit currently active, but not in the transaction already and runs the transaction
 func (sys *Daemon) Isolate(names ...string) (err error) {
 	log.WithField("names", names).Debugf("sys.Isolate")
 
@@ -201,6 +209,7 @@ func (sys *Daemon) Isolate(names ...string) (err error) {
 	return tr.Run()
 }
 
+// Restart gets names from internal hashmap, creates a new restart transaction and runs it
 func (sys *Daemon) Restart(names ...string) (err error) {
 	log.WithField("names", names).Debugf("sys.Restart")
 
@@ -211,6 +220,7 @@ func (sys *Daemon) Restart(names ...string) (err error) {
 	return tr.Run()
 }
 
+// Reload gets names from internal hashmap, creates a new reload transaction and runs it
 func (sys *Daemon) Reload(names ...string) (err error) {
 	log.WithField("names", names).Debugf("sys.Reload")
 
@@ -240,6 +250,7 @@ func (sys *Daemon) newTransaction(typ jobType, names []string) (tr *transaction,
 	return
 }
 
+// Enable gets names from internal hasmap and calls Enable() on each unit returned
 func (sys *Daemon) Enable(names ...string) (err error) {
 	log.WithField("names", names).Debugf("sys.Enable")
 
@@ -252,6 +263,7 @@ func (sys *Daemon) Enable(names ...string) (err error) {
 	})
 }
 
+// Disable gets names from internal hasmap and calls Disable() on each unit returned
 func (sys *Daemon) Disable(names ...string) (err error) {
 	log.WithField("names", names).Debugf("sys.Disable")
 
@@ -289,8 +301,8 @@ func (sys *Daemon) Units() (units []*Unit) {
 	return
 }
 
-// Unit looks up the unit name in the internal hasmap of loaded units and returns it
-// If error is returned, it will be error from sys.Load(name)
+// Unit looks up unit name in the internal hasmap and returns the unit created associated with it
+// or nil and ErrNotFound, if it does not exist
 func (sys *Daemon) Unit(name string) (u *Unit, err error) {
 	log.WithField("name", name).Debugf("sys.Unit")
 
@@ -308,11 +320,13 @@ func (sys *Daemon) Get(name string) (u *Unit, err error) {
 	log.WithField("name", name).Debugf("sys.Get")
 
 	if u, err = sys.Unit(name); err != nil || !u.IsLoaded() {
-		return sys.Load(name)
+		return sys.load(name)
 	}
 	return
 }
 
+// Supervise creates a *Unit wrapping v and stores it in internal hashmap
+// If a unit with name specified already exists - nil and ErrExists are returned
 func (sys *Daemon) Supervise(name string, v unit.Interface) (u *Unit, err error) {
 	log.WithFields(log.Fields{
 		"name":      name,
@@ -342,10 +356,9 @@ func (sys *Daemon) newUnit(name string, v unit.Interface) (u *Unit) {
 	return
 }
 
-// TODO: don't export
-// Load searches for name in configured paths, parses it, and either overwrites the definition of already
+// load searches for name in configured paths, parses it, and either overwrites the definition of already
 // created Unit or creates a new one
-func (sys *Daemon) Load(name string) (u *Unit, err error) {
+func (sys *Daemon) load(name string) (u *Unit, err error) {
 	log.WithField("name", name).Debugln("sys.Load")
 
 	if !Supported(name) {

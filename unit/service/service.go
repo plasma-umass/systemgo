@@ -112,7 +112,7 @@ func (sv *Unit) Start() (err error) {
 	e := log.WithField("ExecStart", sv.Definition.Service.ExecStart)
 
 	e.Debug("sv.Start")
-	defer e.WithField("error", err).Debug("started")
+	defer e.WithField("err", err).Debug("started")
 
 	if dir := sv.Definition.Service.WorkingDirectory; dir != "" {
 		olddir, err := os.Getwd()
