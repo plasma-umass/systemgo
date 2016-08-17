@@ -148,14 +148,18 @@ func TestStart(t *testing.T) {
 	for _, u := range units {
 		wg.Add(1)
 		go func(u *Unit) {
+			defer wg.Done()
+
 			for u.job == nil {
 				log.Warnf("%s job still nil", u.Name())
 				time.Sleep(100 * time.Millisecond)
 			}
+
 			log.Infof("Waiting for %s job to finish", u.Name())
 			u.job.Wait()
-			log.Infof("%s job finished", u.Name())
-			wg.Done()
+			log.Debugf("%s job finished", u.Name())
+
+			assert.True(t, u.job.Success())
 		}(u)
 	}
 	wg.Wait()
@@ -166,6 +170,7 @@ func TestStop(t *testing.T) {
 	defer ctrl.Finish()
 
 	m := newMock(ctrl)
+	m.MockStopper.EXPECT().Stop().Return(nil).Times(1)
 
 	sys := New()
 
@@ -174,6 +179,13 @@ func TestStop(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.NoError(t, sys.Stop(u.Name()))
+	for u.job == nil {
+		log.Warnf("%s job still nil", u.Name())
+		time.Sleep(100 * time.Millisecond)
+	}
+	u.job.Wait()
+
+	assert.True(t, u.job.Success())
 }
 
 func empty(m *mockUnit, methods ...string) {
