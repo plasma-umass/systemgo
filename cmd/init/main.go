@@ -4,6 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"os/signal"
+	"sync"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
@@ -15,11 +18,12 @@ import (
 
 // Initializes the system, sets the default paths, as specified in configuration and attempts to start the default target, falls back to "rescue.target", if it fails
 func main() {
-	// Initialize system
-	System = system.New()
-	System.SetPaths(config.Paths...)
-
 	go Serve()
+
+	// Initialize system
+	log.Info("Systemgo starting...")
+
+	System.SetPaths(config.Paths...)
 
 	// Start the default target
 	if err := System.Start(config.Target); err != nil {
@@ -52,11 +56,38 @@ func main() {
 		}()
 	}
 
-	select {}
+	exit := make(chan os.Signal)
+	signal.Notify(exit, os.Interrupt, os.Kill)
+	<-exit
+
+	log.Infoln("Shutting down...")
+	if err := System.Isolate("shutdown.target"); err != nil {
+		log.Fatalf("Error shutting down: %s", err)
+	}
+
+	wg := &sync.WaitGroup{}
+	for _, u := range System.Units() {
+		if u.IsActive() {
+			log.Infof("Waiting for %s to stop", u.Name())
+			wg.Add(1)
+
+			go func(u *system.Unit) {
+				defer wg.Done()
+
+				var t time.Duration
+				for range time.Tick(time.Second) {
+					t += time.Second
+					if !u.IsActive() || t == time.Minute {
+						return
+					}
+				}
+			}(u)
+		}
+	}
 }
 
 // Instance of a system
-var System *system.Daemon
+var System = system.New()
 
 // Listen for systemctl requests
 func Serve() {
