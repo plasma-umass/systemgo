@@ -21,6 +21,8 @@ type job struct {
 
 	waitch chan struct{}
 	err    error
+
+	mutex sync.Mutex
 }
 
 const JOB_TYPE_COUNT = 4
@@ -65,6 +67,8 @@ func newJob(typ jobType, u *Unit) (j *job) {
 
 		after:  set{},
 		before: set{},
+
+		waitch: make(chan struct{}),
 	}
 }
 
@@ -73,7 +77,7 @@ func newJob(typ jobType, u *Unit) (j *job) {
 //}
 
 func (j *job) IsRunning() bool {
-	return j.waitch != nil
+	return !j.executed
 }
 
 func (j *job) Success() bool {
@@ -85,9 +89,7 @@ func (j *job) Failed() bool {
 }
 
 func (j *job) Wait() (finished bool) {
-	if j.IsRunning() {
-		<-j.waitch
-	}
+	<-j.waitch
 	return true
 }
 
@@ -99,8 +101,6 @@ func (j *job) State() (st jobState) {
 	switch {
 	case j.IsRunning():
 		return running
-	case !j.executed:
-		return waiting
 	case j.err == nil:
 		return success
 	default:
@@ -115,18 +115,24 @@ func (j *job) Run() (err error) {
 	})
 	e.Debugf("j.Run()")
 
-	j.waitch = make(chan struct{})
-
 	j.unit.job = j
+	defer func() {
+		j.err = err
+		j.finish()
+	}()
 
 	wg := &sync.WaitGroup{}
 	for dep := range j.requires {
 		wg.Add(1)
 		go func(dep *job) {
-			e.Debugf("waiting for %s", dep.unit.Name())
+			e := e.WithField("dep", dep.unit.Name())
 
+			e.Debug("dep.Wait")
 			dep.Wait()
+			e.Debug("dep.Wait returned")
+
 			if !dep.Success() {
+				e.Debugf("->!dep.Success: %s", dep.State())
 				j.unit.Log.Errorf("%s failed to %s", dep.unit.Name(), dep.typ)
 				err = ErrDepFail
 			}
@@ -134,44 +140,32 @@ func (j *job) Run() (err error) {
 		}(dep)
 	}
 	wg.Wait()
-	e.Debugf("dependencies finished loading")
 
 	if err != nil {
 		e.Debugf("failed: %s", err)
 		return
 	}
 
-	e.Debugf("j.execute()")
-	err = j.execute()
-
-	close(j.waitch)
-	j.waitch = nil
-
-	j.unit.job = nil
-
-	return
-}
-
-func (j *job) execute() (err error) {
 	switch j.typ {
 	case start:
-		err = j.unit.start()
+		return j.unit.start()
 	case stop:
-		err = j.unit.stop()
+		return j.unit.stop()
 	case restart:
 		if err = j.unit.stop(); err != nil {
-			break
+			return err
 		}
-		err = j.unit.start()
+		return j.unit.start()
 	case reload:
-		err = j.unit.reload()
+		return j.unit.reload()
 	default:
 		panic(ErrUnknownType)
 	}
-	j.executed = true
-	j.err = err
+}
 
-	return
+func (j *job) finish() {
+	j.executed = true
+	close(j.waitch)
 }
 
 var mergeTable = map[jobType]map[jobType]jobType{
