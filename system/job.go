@@ -27,26 +27,6 @@ type job struct {
 
 const JOB_TYPE_COUNT = 4
 
-type jobState int
-
-//go:generate stringer -type=jobState
-const (
-	waiting jobState = iota
-	running
-	success
-	failed
-)
-
-type jobType int
-
-//go:generate stringer -type=jobType
-const (
-	start jobType = iota
-	stop
-	reload
-	restart
-)
-
 func newJob(typ jobType, u *Unit) (j *job) {
 	log.WithFields(log.Fields{
 		"typ": typ,
