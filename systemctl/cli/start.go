@@ -32,7 +32,7 @@ var startCmd = &cobra.Command{
 	Short: "Start (activate) one or more units",
 	Long:  `TODO: add description`,
 	Run: func(cmd *cobra.Command, args []string) {
-		if err := sys.Do("start", args...); err != nil {
+		if err := client.Call("Server.Start", args, nil); err != nil {
 			log.Fatalln(err.Error())
 		}
 	},

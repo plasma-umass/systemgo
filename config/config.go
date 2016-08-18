@@ -72,7 +72,7 @@ func init() {
 	Target = viper.GetString("target")
 	Paths = viper.GetStringSlice("paths")
 	Port = port(viper.GetInt("port"))
-	Retry = viper.GetDuration("retry")
+	Retry = viper.GetDuration("retry") * time.Second
 	Debug = viper.GetBool("debug")
 
 	if Debug {

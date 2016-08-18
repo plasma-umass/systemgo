@@ -8,6 +8,7 @@ import (
 type Daemon interface {
 	Start(...string) error
 	Stop(...string) error
+	Isolate(...string) error
 	Restart(...string) error
 	Reload(...string) error
 	Enable(...string) error

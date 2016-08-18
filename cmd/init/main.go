@@ -1,9 +1,10 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
+	"net/rpc"
 	"os"
 	"os/signal"
 	"sync"
@@ -102,32 +103,17 @@ func Serve() {
 
 // Handle systemctl requests using HTTP
 func listenHTTP(addr string) (err error) {
-	server := http.NewServeMux()
+	daemonRPC := systemctl.NewServer(System)
+	rpc.Register(daemonRPC)
+	rpc.HandleHTTP()
 
-	for name, handler := range systemctl.Handlers(System) {
-		func(handler systemctl.Handler) {
-			server.HandleFunc("/"+name, func(w http.ResponseWriter, req *http.Request) {
-				//msg := []systemctl.Response{}
-				v := req.URL.Query()
+	e := log.WithField("port", config.Port)
 
-				names, ok := v["unit"]
-				if !ok {
-					names = []string{}
-				}
-
-				var resp []byte
-				if resp, err = json.Marshal(handler(names...)); err != nil {
-					log.Printf("json.Marshal(result): %s", err)
-					return
-				}
-
-				if _, err = w.Write(resp); err != nil {
-					log.Printf("Write(resp): %s", err)
-				}
-			})
-		}(handler)
+	l, err := net.Listen("tcp", config.Port.String())
+	if err != nil {
+		e.Fatalf("Listen error: %s", err)
 	}
 
 	log.Infof("Listening on http://localhost%s", config.Port)
-	return http.ListenAndServe(addr, server)
+	return http.Serve(l, nil)
 }

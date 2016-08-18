@@ -22,16 +22,17 @@ package cli
 
 import (
 	"fmt"
-	"log"
+	"net/rpc"
 	"os"
 
-	"github.com/rvolosatovs/systemgo/system"
+	log "github.com/Sirupsen/logrus"
+
+	"github.com/rvolosatovs/systemgo/config"
 	"github.com/rvolosatovs/systemgo/systemctl"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
-var sys systemctl.Client
+var client *rpc.Client
 
 var cfgFile string
 
@@ -41,16 +42,11 @@ var RootCmd = &cobra.Command{
 	Short: "Query or send control commands to the systemgo manager",
 	Long:  `TODO: add description`,
 	Run: func(cmd *cobra.Command, args []string) {
-		yield, err := sys.Get("status")
-		if err != nil {
-			log.Fatalln(err.Error())
+		reply := &systemctl.QueryResponse{}
+		if err := client.Call("Server.Units", args, &reply); err != nil {
+			log.Fatal(err)
 		}
-
-		for yield.More() {
-			var st system.Status
-			yield.Decode(&st)
-			fmt.Println(st)
-		}
+		fmt.Println(reply)
 	},
 }
 
@@ -64,33 +60,13 @@ func Execute() {
 }
 
 func init() {
-	cobra.OnInitialize(initConfig)
+	addr := fmt.Sprintf("localhost%s", config.Port)
 
-	// Here you will define your flags and configuration settings.
-	// Cobra supports Persistent Flags, which, if defined here,
-	// will be global for your application.
+	e := log.WithField("addr", addr)
+	e.Debugf("Dialing...")
 
-	RootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.systemctl.yaml)")
-	// Cobra also supports local flags, which will only run
-	// when this action is called directly.
-	RootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
-
-	// Initialize a new systemctl client
-	sys = systemctl.NewHttpClient("http://127.0.0.1:28537/") // TODO: use config
-}
-
-// initConfig reads in config file and ENV variables if set.
-func initConfig() {
-	if cfgFile != "" { // enable ability to specify config file via flag
-		viper.SetConfigFile(cfgFile)
-	}
-
-	viper.SetConfigName(".systemctl") // name of config file (without extension)
-	viper.AddConfigPath("$HOME")      // adding home directory as first search path
-	viper.AutomaticEnv()              // read in environment variables that match
-
-	// If a config file is found, read it in.
-	if err := viper.ReadInConfig(); err == nil {
-		fmt.Println("Using config file:", viper.ConfigFileUsed())
+	var err error
+	if client, err = rpc.DialHTTP("tcp", addr); err != nil {
+		e.Fatalf("Dial failed: %s", err)
 	}
 }

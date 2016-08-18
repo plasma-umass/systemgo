@@ -32,7 +32,7 @@ var stopCmd = &cobra.Command{
 	Short: "Stop (deactivate) one or more units",
 	Long:  `TODO: add description`,
 	Run: func(cmd *cobra.Command, args []string) {
-		if err := sys.Do("stop", args...); err != nil {
+		if err := client.Call("Server.Stop", args, nil); err != nil {
 			log.Fatalln(err.Error())
 		}
 	},
