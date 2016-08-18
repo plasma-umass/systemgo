@@ -20,7 +20,15 @@
 
 package cli
 
-import "github.com/spf13/cobra"
+import (
+	"fmt"
+
+	"github.com/rvolosatovs/systemgo/systemctl"
+	"github.com/rvolosatovs/systemgo/unit"
+	"github.com/spf13/cobra"
+
+	log "github.com/Sirupsen/logrus"
+)
 
 // statusCmd represents the status command
 var statusCmd = &cobra.Command{
@@ -28,32 +36,14 @@ var statusCmd = &cobra.Command{
 	Short: "Show runtime status of one or more units",
 	Long:  `TODO: add description`,
 	Run: func(cmd *cobra.Command, args []string) {
+		var resp systemctl.Response
+		if err := client.Call("Server.Status", args, &resp); err != nil {
+			log.Error(err)
+		}
 
-		// TODO
-		//if err := client.Call("Server.Status", args); err != nil {
-		//	log.Fatalln(err.Error())
-		//}
-
-		//yield, err := sys.Get("status", args...)
-		//if err != nil {
-		//	log.Fatalln(err.Error())
-		//}
-
-		//if len(args) == 0 {
-		//	var v system.Status
-
-		//	yield.Decode(&v)
-		//	fmt.Println(v)
-
-		//	return
-		//}
-
-		//var v unit.Status
-
-		//for yield.More() {
-		//	yield.Decode(&v)
-		//	fmt.Println(v)
-		//}
+		for _, st := range resp.Yield.(map[string]unit.Status) {
+			fmt.Println(st)
+		}
 	},
 }
 

@@ -1,13 +1,25 @@
 package systemctl
 
-import "fmt"
+import (
+	"encoding/gob"
+	"fmt"
 
-type QueryResponse struct {
+	"github.com/rvolosatovs/systemgo/unit"
+)
+
+type Response struct {
 	Yield interface{}
-	Errs  ExecResponse
 }
 
-type ExecResponse map[string]error
+func init() {
+	gob.Register(map[string]unit.Status{})
+}
+
+func newResponse() (resp *Response) {
+	return &Response{
+		Yield: map[string]fmt.Stringer{},
+	}
+}
 
 func NewServer(sys Daemon) (sv *Server) {
 	return &Server{sys}
@@ -17,43 +29,58 @@ type Server struct {
 	sys Daemon
 }
 
-func (sv *Server) Start(names []string, errs *ExecResponse) (err error) {
+func (sv *Server) Start(names []string, resp *Response) (err error) {
 	return sv.sys.Start(names...)
 }
 
-func (sv *Server) Stop(names []string, errs *ExecResponse) (err error) {
+func (sv *Server) Stop(names []string, resp *Response) (err error) {
 	return sv.sys.Stop(names...)
 }
 
-func (sv *Server) Restart(names []string, errs *ExecResponse) (err error) {
+func (sv *Server) Restart(names []string, resp *Response) (err error) {
 	return sv.sys.Restart(names...)
 }
 
-func (sv *Server) Isolate(names []string, errs *ExecResponse) (err error) {
+func (sv *Server) Isolate(names []string, resp *Response) (err error) {
 	return sv.sys.Isolate(names...)
 }
 
-func (sv *Server) Reload(names []string, errs *ExecResponse) (err error) {
+func (sv *Server) Reload(names []string, resp *Response) (err error) {
 	return sv.sys.Reload(names...)
 }
 
-func (sv *Server) Enable(names []string, errs *ExecResponse) (err error) {
+func (sv *Server) Enable(names []string, resp *Response) (err error) {
 	return sv.sys.Enable(names...)
 }
 
-func (sv *Server) Disable(names []string, errs *ExecResponse) (err error) {
+func (sv *Server) Disable(names []string, resp *Response) (err error) {
 	return sv.sys.Disable(names...)
 }
 
-func (sv *Server) Status(names []string, resp *QueryResponse) (err error) {
-	//TODO
-	//statuses := map[string]system.Status
-	statuses := map[string]fmt.Stringer{}
+func (sv *Server) Status(names []string, resp *Response) (err error) {
+	*resp = *newResponse()
+
+	statuses := map[string]unit.Status{}
 
 	for _, name := range names {
-		statuses[name], resp.Errs[name] = sv.sys.StatusOf(name)
+		var st unit.Status
+		if st, err = sv.sys.StatusOf(name); err != nil {
+			continue
+		}
+
+		statuses[name] = st
 	}
 
 	resp.Yield = statuses
-	return nil
+	return err
+}
+
+func (sv *Server) StatusAll(names []string, resp *Response) (err error) {
+	units := sv.sys.Units()
+
+	names = make([]string, 0, len(units))
+	for _, u := range units {
+		names = append(names, u.Name())
+	}
+	return sv.Status(names, resp)
 }

@@ -14,6 +14,7 @@ type Daemon interface {
 	Enable(...string) error
 	Disable(...string) error
 
+	Units() []*system.Unit
 	Status() (system.Status, error)
 	StatusOf(string) (unit.Status, error)
 	IsEnabled(string) (unit.Enable, error)

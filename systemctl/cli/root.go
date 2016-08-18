@@ -29,6 +29,7 @@ import (
 
 	"github.com/rvolosatovs/systemgo/config"
 	"github.com/rvolosatovs/systemgo/systemctl"
+	"github.com/rvolosatovs/systemgo/unit"
 	"github.com/spf13/cobra"
 )
 
@@ -42,11 +43,18 @@ var RootCmd = &cobra.Command{
 	Short: "Query or send control commands to the systemgo manager",
 	Long:  `TODO: add description`,
 	Run: func(cmd *cobra.Command, args []string) {
-		reply := &systemctl.QueryResponse{}
-		if err := client.Call("Server.Units", args, &reply); err != nil {
-			log.Fatal(err)
+		//return listUnitsCmd.Run(cmd, args)
+
+		var resp systemctl.Response
+		if err := client.Call("Server.StatusAll", args, &resp); err != nil {
+			log.Error(err)
 		}
-		fmt.Println(reply)
+
+		for name, st := range resp.Yield.(map[string]unit.Status) {
+			fmt.Println(name)
+			// FIXME
+			fmt.Println(st)
+		}
 	},
 }
 

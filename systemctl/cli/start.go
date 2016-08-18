@@ -21,7 +21,7 @@
 package cli
 
 import (
-	"log"
+	log "github.com/Sirupsen/logrus"
 
 	"github.com/spf13/cobra"
 )
@@ -33,7 +33,7 @@ var startCmd = &cobra.Command{
 	Long:  `TODO: add description`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := client.Call("Server.Start", args, nil); err != nil {
-			log.Fatalln(err.Error())
+			log.Error(err)
 		}
 	},
 }
