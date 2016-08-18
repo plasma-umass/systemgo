@@ -1,4 +1,8 @@
-debug: true
-port: 28357
+target: default.target
 paths:
-    - test
+    - /systemgo
+
+port: 8000
+retry: 5
+
+debug: false
