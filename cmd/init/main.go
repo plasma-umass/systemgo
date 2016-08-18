@@ -24,12 +24,12 @@ func main() {
 	// Initialize system
 	log.Info("Systemgo starting...")
 
-	System.SetPaths(config.Paths...)
+	sys.SetPaths(config.Paths...)
 
 	// Start the default target
-	if err := System.Start(config.Target); err != nil {
+	if err := sys.Start(config.Target); err != nil {
 		log.Errorf("Error starting default target %s: %s", config.Target, err)
-		if err = System.Start(config.RESCUE_TARGET); err != nil {
+		if err = sys.Start(config.RESCUE_TARGET); err != nil {
 			log.Errorf("Error starting rescue target %s: %s", config.RESCUE_TARGET, err)
 		}
 	}
@@ -37,8 +37,8 @@ func main() {
 	if log.GetLevel() == log.DebugLevel {
 		go func() {
 			for range time.Tick(5 * time.Second) {
-				for _, u := range System.Units() {
-					st, err := System.StatusOf(u.Name())
+				for _, u := range sys.Units() {
+					st, err := sys.StatusOf(u.Name())
 					if err != nil {
 						panic(err)
 					}
@@ -62,12 +62,12 @@ func main() {
 	<-exit
 
 	log.Infoln("Shutting down...")
-	if err := System.Isolate("shutdown.target"); err != nil {
+	if err := sys.Isolate("shutdown.target"); err != nil {
 		log.Fatalf("Error shutting down: %s", err)
 	}
 
 	wg := &sync.WaitGroup{}
-	for _, u := range System.Units() {
+	for _, u := range sys.Units() {
 		if u.IsActive() {
 			log.Infof("Waiting for %s to stop", u.Name())
 			wg.Add(1)
@@ -88,7 +88,7 @@ func main() {
 }
 
 // Instance of a system
-var System = system.New()
+var sys = system.New()
 
 // Listen for systemctl requests
 func Serve() {
@@ -103,7 +103,7 @@ func Serve() {
 
 // Handle systemctl requests using HTTP
 func listenHTTP(addr string) (err error) {
-	daemonRPC := systemctl.NewServer(System)
+	daemonRPC := systemctl.NewServer(sys)
 	rpc.Register(daemonRPC)
 	rpc.HandleHTTP()
 
