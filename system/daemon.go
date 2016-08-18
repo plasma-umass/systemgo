@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -347,11 +348,14 @@ func (sys *Daemon) newUnit(name string, v unit.Interface) (u *Unit) {
 	}).Debugf("sys.newUnit")
 
 	u = NewUnit(v)
+	u.name = name
 
 	u.System = sys
 
-	u.name = name
 	sys.units[name] = u
+	if strings.HasSuffix(name, ".service") {
+		sys.units[strings.TrimSuffix(name, ".service")] = u
+	}
 
 	return
 }
