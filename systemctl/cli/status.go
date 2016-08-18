@@ -41,8 +41,10 @@ var statusCmd = &cobra.Command{
 			log.Error(err)
 		}
 
-		for _, st := range resp.Yield.(map[string]unit.Status) {
-			fmt.Println(st)
+		if resp.Yield != nil {
+			for _, st := range resp.Yield.(map[string]unit.Status) {
+				fmt.Println(st)
+			}
 		}
 	},
 }
