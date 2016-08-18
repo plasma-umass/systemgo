@@ -3,17 +3,13 @@ package service
 
 import (
 	"io"
-	"os"
 	"os/exec"
 	"strings"
-	"sync"
 
 	"github.com/rvolosatovs/systemgo/unit"
 
 	log "github.com/Sirupsen/logrus"
 )
-
-var dirLock sync.Mutex
 
 const DEFAULT_TYPE = "simple"
 
@@ -103,6 +99,7 @@ func (sv *Unit) Define(r io.Reader /*, errch chan<- error*/) (err error) {
 
 	cmd := strings.Fields(def.Service.ExecStart)
 	sv.Cmd = exec.Command(cmd[0], cmd[1:]...)
+	sv.Cmd.Dir = sv.Definition.Service.WorkingDirectory
 
 	return nil
 }
@@ -113,22 +110,6 @@ func (sv *Unit) Start() (err error) {
 
 	e.Debug("sv.Start")
 	defer e.WithField("err", err).Debug("started")
-
-	if dir := sv.Definition.Service.WorkingDirectory; dir != "" {
-		olddir, err := os.Getwd()
-		if err != nil {
-			return err
-		}
-
-		dirLock.Lock()
-		defer dirLock.Unlock()
-
-		err = os.Chdir(dir)
-		if err != nil {
-			return err
-		}
-		defer os.Chdir(olddir)
-	}
 
 	switch sv.Definition.Service.Type {
 	case "simple":
