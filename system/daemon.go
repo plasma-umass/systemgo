@@ -151,21 +151,6 @@ func (sys *Daemon) jobCount() (n int) {
 	return
 }
 
-//func (sys Daemon) WriteStatus(output io.Writer, names ...string) (err error) {
-//if len(names) == 0 {
-//w := tabwriter.Writer
-//out += fmt.Sprintln("unit\t\t\t\tload\tactive\tsub\tdescription")
-//out += fmt.Sprintln(s.Units)
-//}
-
-//func (us units) String() (out string) {
-//for _, u := range us {
-//out += fmt.Sprintf("%s\t%s\t%s\t%s\t%s\t\n",
-//u.Name(), u.Loaded(), u.Active(), u.Sub(), u.Description())
-//}
-//return
-//}
-
 // Start gets names from internal hashmap, creates a new start transaction and runs it
 func (sys *Daemon) Start(names ...string) (err error) {
 	log.WithField("names", names).Debugf("sys.Start")
