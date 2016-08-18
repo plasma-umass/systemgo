@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	DEFAULT_PORT   = 8000
+	DEFAULT_PORT   = 8008
 	DEFAULT_TARGET = "default.target"
 	RESCUE_TARGET  = "rescue.target"
 )

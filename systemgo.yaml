@@ -1,8 +1,10 @@
 target: default.target
 paths:
-    - /systemgo
+    - /etc/systemd/system
+    - /run/systemd/system
+    - /lib/systemd/system
 
-port: 8000
+port: 8008
 retry: 5
 
-debug: false
+debug: true
