@@ -60,14 +60,19 @@ func init() {
 	viper.AddConfigPath("/etc/systemgo")
 
 	if err := viper.ReadInConfig(); err != nil {
-		switch err.(type) {
-		case viper.ConfigFileNotFoundError:
+		if os.IsNotExist(err) {
 			log.Warn("Config file not found, using defaults")
-		case viper.ConfigParseError:
-			log.Errorf("Error parsing %s: %s, using defaults", viper.ConfigFileUsed(), err)
+		} else {
+			log.WithFields(log.Fields{
+				"file": viper.ConfigFileUsed(),
+				"err":  err,
+			}).Errorf("Parse error, using defaults")
 		}
+	} else {
+		log.WithFields(log.Fields{
+			"file": viper.ConfigFileUsed(),
+		}).Infof("Found configuration file")
 	}
-	log.Infof("Found configuration file at %s", viper.ConfigFileUsed())
 
 	Target = viper.GetString("target")
 	Paths = viper.GetStringSlice("paths")
