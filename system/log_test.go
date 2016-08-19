@@ -5,15 +5,9 @@ import (
 	"io/ioutil"
 	"testing"
 
-	"github.com/Sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-func init() {
-	logrus.StandardLogger().Level = logrus.DebugLevel
-	debug = true
-}
 
 var lorem = []byte(`
 	Lorem ipsum dolor sit amet, consectetur adipiscing elit.

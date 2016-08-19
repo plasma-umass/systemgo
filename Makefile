@@ -114,6 +114,7 @@ coveralls: dependcoverall
 
 travis: dependcoverall build mock
 	@echo "Starting travis build..."
+	@./bin/init&
 	@$(ABS_COVER) --coveralls $(TRAVIS_MODE)
 
 

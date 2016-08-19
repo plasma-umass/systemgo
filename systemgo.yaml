@@ -1,0 +1,10 @@
+target: default.target
+paths:
+    - /etc/systemd/system
+    - /run/systemd/system
+    - /lib/systemd/system
+
+port: 8008
+retry: 5
+
+debug: true

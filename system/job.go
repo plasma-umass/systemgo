@@ -2,7 +2,6 @@ package system
 
 import (
 	"errors"
-	"fmt"
 	"sync"
 
 	log "github.com/Sirupsen/logrus"
@@ -22,31 +21,18 @@ type job struct {
 
 	waitch chan struct{}
 	err    error
+
+	mutex sync.Mutex
 }
 
 const JOB_TYPE_COUNT = 4
 
-type jobState int
-
-//go:generate stringer -type=jobState
-const (
-	waiting jobState = iota
-	running
-	success
-	failed
-)
-
-type jobType int
-
-//go:generate stringer -type=jobType
-const (
-	start jobType = iota
-	stop
-	reload
-	restart
-)
-
 func newJob(typ jobType, u *Unit) (j *job) {
+	log.WithFields(log.Fields{
+		"typ": typ,
+		"u":   u,
+	}).Debugf("newJob")
+
 	return &job{
 		typ:  typ,
 		unit: u,
@@ -61,15 +47,30 @@ func newJob(typ jobType, u *Unit) (j *job) {
 
 		after:  set{},
 		before: set{},
+
+		waitch: make(chan struct{}),
 	}
 }
 
-func (j *job) String() string {
-	return fmt.Sprintf("%s job for %s", j.typ, j.unit.Name())
+//func (j *job) String() string {
+//return fmt.Sprintf("%s job for %s", j.typ, j.unit.Name())
+//}
+
+func (j *job) IsRedundant() bool {
+	switch j.typ {
+	case stop:
+		return j.unit.IsDeactivating() || j.unit.IsDead()
+	case start:
+		return j.unit.IsActivating() || j.unit.IsActive()
+	case reload:
+		return j.unit.IsReloading()
+	default:
+		return false
+	}
 }
 
 func (j *job) IsRunning() bool {
-	return j.waitch != nil
+	return !j.executed
 }
 
 func (j *job) Success() bool {
@@ -81,9 +82,7 @@ func (j *job) Failed() bool {
 }
 
 func (j *job) Wait() (finished bool) {
-	if j.IsRunning() {
-		<-j.waitch
-	}
+	<-j.waitch
 	return true
 }
 
@@ -95,8 +94,6 @@ func (j *job) State() (st jobState) {
 	switch {
 	case j.IsRunning():
 		return running
-	case !j.executed:
-		return waiting
 	case j.err == nil:
 		return success
 	default:
@@ -105,74 +102,63 @@ func (j *job) State() (st jobState) {
 }
 
 func (j *job) Run() (err error) {
-	j.waitch = make(chan struct{})
+	e := log.WithFields(log.Fields{
+		"unit": j.unit.Name(),
+		"job":  j.typ,
+	})
+	e.Debugf("j.Run()")
 
 	j.unit.job = j
+	defer func() {
+		j.err = err
+		j.finish()
+	}()
 
 	wg := &sync.WaitGroup{}
 	for dep := range j.requires {
 		wg.Add(1)
 		go func(dep *job) {
-			defer wg.Done()
-			log.Debugf("%v waiting for %v", j, dep)
+			e := e.WithField("dep", dep.unit.Name())
+
+			e.Debug("dep.Wait")
 			dep.Wait()
+			e.Debug("dep.Wait returned")
+
 			if !dep.Success() {
-				j.unit.Log.Printf("%v failed", j)
+				e.Debugf("->!dep.Success: %s", dep.State())
+				j.unit.Log.Errorf("%s failed to %s", dep.unit.Name(), dep.typ)
 				err = ErrDepFail
 			}
+			wg.Done()
 		}(dep)
 	}
-
 	wg.Wait()
 
-	j.err = j.execute()
-
-	j.unit.job = nil
-
-	close(j.waitch)
-	j.waitch = nil
-
-	return
-}
-
-func (j *job) execute() (err error) {
-	wg := &sync.WaitGroup{}
-	for dep := range j.requires {
-		if !dep.Success() {
-			wg.Add(1)
-			go func() {
-				dep.Wait()
-				if !dep.Success() {
-					err = dep.err
-				}
-				wg.Done()
-			}()
-		}
-	}
-
-	wg.Wait()
 	if err != nil {
+		e.Debugf("failed: %s", err)
 		return
 	}
 
 	switch j.typ {
 	case start:
-		err = j.unit.start()
+		return j.unit.start()
 	case stop:
-		err = j.unit.stop()
+		return j.unit.stop()
 	case restart:
 		if err = j.unit.stop(); err != nil {
-			break
+			return err
 		}
-		err = j.unit.start()
+		return j.unit.start()
 	case reload:
-		err = j.unit.reload()
+		return j.unit.reload()
 	default:
 		panic(ErrUnknownType)
 	}
-	j.executed = true
+}
 
-	return
+func (j *job) finish() {
+	j.executed = true
+	close(j.waitch)
 }
 
 var mergeTable = map[jobType]map[jobType]jobType{

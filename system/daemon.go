@@ -5,12 +5,12 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/rvolosatovs/systemgo/unit"
 	"github.com/rvolosatovs/systemgo/unit/service"
-	"github.com/rvolosatovs/systemgo/unit/target"
 
 	log "github.com/Sirupsen/logrus"
 )
@@ -31,7 +31,7 @@ type Daemon struct {
 	// System state
 	state State
 
-	// Starting time
+	// System starting time
 	since time.Time
 
 	// System log
@@ -40,14 +40,8 @@ type Daemon struct {
 	mutex sync.Mutex
 }
 
+// New returns *Daemon ready to use
 func New() (sys *Daemon) {
-	defer func() {
-		if debug {
-			sys.Log.Logger.Hooks.Add(&errorHook{
-				Source: "system",
-			})
-		}
-	}()
 	return &Daemon{
 		units: make(map[string]*Unit),
 
@@ -57,14 +51,20 @@ func New() (sys *Daemon) {
 	}
 }
 
+// Paths returns paths, which get searched for unit files by sys(first path gets searched first)
 func (sys *Daemon) Paths() (paths []string) {
 	return sys.paths
 }
 
+// SetPaths sets paths, which get searched for unit files by sys(first path gets searched first)
 func (sys *Daemon) SetPaths(paths ...string) {
+	sys.mutex.Lock()
+	defer sys.mutex.Unlock()
+
 	sys.paths = paths
 }
 
+// Since returns time, when sys was created
 func (sys *Daemon) Since() (t time.Time) {
 	return sys.since
 }
@@ -109,7 +109,7 @@ func (sys *Daemon) IsEnabled(name string) (st unit.Enable, err error) {
 	//if u, err = sys.Unit(name); err == nil && sys.Enabled[u] {
 	//st = unit.Enabled
 	//}
-	return unit.Enabled, ErrNotImplemented
+	return -1, ErrNotImplemented
 }
 
 // IsActive returns activation state of the unit held in-memory under specified name
@@ -130,21 +130,7 @@ func (sys *Daemon) StatusOf(name string) (st unit.Status, err error) {
 		return
 	}
 
-	st = unit.Status{
-		Load: unit.LoadStatus{
-			Path:   u.Path(),
-			Loaded: u.Loaded(),
-			State:  unit.Enabled,
-		},
-		Activation: unit.ActivationStatus{
-			State: u.Active(),
-			Sub:   u.Sub(),
-		},
-	}
-
-	st.Log, err = ioutil.ReadAll(u.Log)
-
-	return
+	return u.Status(), nil
 }
 
 func (sys *Daemon) failedCount() (n int) {
@@ -165,22 +151,10 @@ func (sys *Daemon) jobCount() (n int) {
 	return
 }
 
-//func (sys Daemon) WriteStatus(output io.Writer, names ...string) (err error) {
-//if len(names) == 0 {
-//w := tabwriter.Writer
-//out += fmt.Sprintln("unit\t\t\t\tload\tactive\tsub\tdescription")
-//out += fmt.Sprintln(s.Units)
-//}
-
-//func (us units) String() (out string) {
-//for _, u := range us {
-//out += fmt.Sprintf("%s\t%s\t%s\t%s\t%s\t\n",
-//u.Name(), u.Loaded(), u.Active(), u.Sub(), u.Description())
-//}
-//return
-//}
-
+// Start gets names from internal hashmap, creates a new start transaction and runs it
 func (sys *Daemon) Start(names ...string) (err error) {
+	log.WithField("names", names).Debugf("sys.Start")
+
 	var tr *transaction
 	if tr, err = sys.newTransaction(start, names); err != nil {
 		return
@@ -188,7 +162,10 @@ func (sys *Daemon) Start(names ...string) (err error) {
 	return tr.Run()
 }
 
+// Stop gets names from internal hashmap, creates a new stop transaction and runs it
 func (sys *Daemon) Stop(names ...string) (err error) {
+	log.WithField("names", names).Debugf("sys.Stop")
+
 	var tr *transaction
 	if tr, err = sys.newTransaction(stop, names); err != nil {
 		return
@@ -196,25 +173,32 @@ func (sys *Daemon) Stop(names ...string) (err error) {
 	return tr.Run()
 }
 
+// Isolate gets names from internal hashmap, creates a new start transaction, adds a stop job
+// for each unit currently active, but not in the transaction already and runs the transaction
 func (sys *Daemon) Isolate(names ...string) (err error) {
+	log.WithField("names", names).Debugf("sys.Isolate")
+
 	var tr *transaction
 	if tr, err = sys.newTransaction(start, names); err != nil {
 		return
 	}
 
-	units := sys.Units()
-	names = make([]string, 0, len(units)-len(tr.unmerged))
-	for _, u := range units {
-		if _, ok := tr.unmerged[u]; !ok {
-			if err = tr.add(stop, u, nil, true, true); err != nil {
-				return
-			}
+	for _, u := range sys.Units() {
+		if _, ok := tr.unmerged[u]; ok {
+			continue
+		}
+
+		if err = tr.add(stop, u, nil, true, true); err != nil {
+			return
 		}
 	}
 	return tr.Run()
 }
 
+// Restart gets names from internal hashmap, creates a new restart transaction and runs it
 func (sys *Daemon) Restart(names ...string) (err error) {
+	log.WithField("names", names).Debugf("sys.Restart")
+
 	var tr *transaction
 	if tr, err = sys.newTransaction(restart, names); err != nil {
 		return
@@ -222,7 +206,10 @@ func (sys *Daemon) Restart(names ...string) (err error) {
 	return tr.Run()
 }
 
+// Reload gets names from internal hashmap, creates a new reload transaction and runs it
 func (sys *Daemon) Reload(names ...string) (err error) {
+	log.WithField("names", names).Debugf("sys.Reload")
+
 	var tr *transaction
 	if tr, err = sys.newTransaction(reload, names); err != nil {
 		return
@@ -249,8 +236,10 @@ func (sys *Daemon) newTransaction(typ jobType, names []string) (tr *transaction,
 	return
 }
 
-// TODO
+// Enable gets names from internal hasmap and calls Enable() on each unit returned
 func (sys *Daemon) Enable(names ...string) (err error) {
+	log.WithField("names", names).Debugf("sys.Enable")
+
 	return sys.getAndExecute(names, func(u *Unit, gerr error) error {
 		if gerr != nil {
 			return gerr
@@ -260,8 +249,10 @@ func (sys *Daemon) Enable(names ...string) (err error) {
 	})
 }
 
-// TODO
+// Disable gets names from internal hasmap and calls Disable() on each unit returned
 func (sys *Daemon) Disable(names ...string) (err error) {
+	log.WithField("names", names).Debugf("sys.Disable")
+
 	return sys.getAndExecute(names, func(u *Unit, gerr error) error {
 		if gerr != nil {
 			return gerr
@@ -282,6 +273,8 @@ func (sys *Daemon) getAndExecute(names []string, fn func(*Unit, error) error) (e
 
 // Units returns a slice of all units created
 func (sys *Daemon) Units() (units []*Unit) {
+	log.Debugf("sys.Units")
+
 	unitSet := map[*Unit]struct{}{}
 	for _, u := range sys.units {
 		unitSet[u] = struct{}{}
@@ -294,9 +287,11 @@ func (sys *Daemon) Units() (units []*Unit) {
 	return
 }
 
-// Unit looks up the unit name in the internal hasmap of loaded units and returns it
-// If error is returned, it will be error from sys.Load(name)
+// Unit looks up unit name in the internal hasmap and returns the unit created associated with it
+// or nil and ErrNotFound, if it does not exist
 func (sys *Daemon) Unit(name string) (u *Unit, err error) {
+	log.WithField("name", name).Debug("sys.Unit")
+
 	var ok bool
 	if u, ok = sys.units[name]; !ok {
 		return nil, ErrNotFound
@@ -308,39 +303,52 @@ func (sys *Daemon) Unit(name string) (u *Unit, err error) {
 // sys.Load(name) if it can not be found
 // If error is returned, it will be error from sys.Load(name)
 func (sys *Daemon) Get(name string) (u *Unit, err error) {
+	log.WithField("name", name).Debug("sys.Get")
+
 	if u, err = sys.Unit(name); err != nil || !u.IsLoaded() {
-		return sys.Load(name)
+		return sys.load(name)
 	}
 	return
 }
 
+// Supervise creates a *Unit wrapping v and stores it in internal hashmap
+// If a unit with name specified already exists - nil and ErrExists are returned
 func (sys *Daemon) Supervise(name string, v unit.Interface) (u *Unit, err error) {
-	if _, exists := sys.units[name]; exists {
+	log.WithFields(log.Fields{
+		"name":      name,
+		"interface": v,
+	}).Debugf("sys.Supervise")
+
+	if u, err = sys.Unit(name); err == nil {
 		return nil, ErrExists
 	}
 
+	return sys.newUnit(name, v), nil
+}
+
+func (sys *Daemon) newUnit(name string, v unit.Interface) (u *Unit) {
+	log.WithFields(log.Fields{
+		"name":      name,
+		"interface": v,
+	}).Debugf("sys.newUnit")
+
 	u = NewUnit(v)
+	u.name = name
+
 	u.System = sys
 
-	u.name = name
 	sys.units[name] = u
-
-	log.WithFields(log.Fields{
-		"unit": name,
-	}).Debugf("Created new *Unit")
+	if strings.HasSuffix(name, ".service") {
+		sys.units[strings.TrimSuffix(name, ".service")] = u
+	}
 
 	return
 }
 
-// Load searches for name in configured paths, parses it, and either overwrites the definition of already
+// load searches for name in configured paths, parses it, and either overwrites the definition of already
 // created Unit or creates a new one
-func (sys *Daemon) Load(name string) (u *Unit, err error) {
-	log.WithFields(log.Fields{
-		"name": name,
-	}).Debugln("sys.Load called")
-
-	var parsed bool
-	u, parsed = sys.units[name]
+func (sys *Daemon) load(name string) (u *Unit, err error) {
+	log.WithField("name", name).Debugln("sys.Load")
 
 	if !Supported(name) {
 		return nil, ErrUnknownType
@@ -364,19 +372,30 @@ func (sys *Daemon) Load(name string) (u *Unit, err error) {
 			}
 			return nil, err
 		}
-		defer file.Close()
+		// Commented out because of gopherjs bug,
+		// which breaks systemgo on Browsix
+		// See https://goo.gl/AycBTv
+		//
+		//defer file.Close()
 
-		if !parsed {
-			if u, err = sys.parse(path); err != nil {
-				return
+		// Check if a unit for name had already been created
+		if u, err = sys.Unit(name); err != nil {
+			// If not - create a new one
+			var v unit.Interface
+			switch filepath.Ext(name) {
+			case ".target":
+				v = &Target{System: sys}
+			case ".service":
+				v = &service.Unit{}
+			default:
+				panic("Trying to load an unsupported unit type")
 			}
 
-			if name != path {
-				sys.units[path] = u
-			}
+			u = sys.newUnit(name, v)
 		}
 
 		u.path = path
+		sys.units[path] = u
 
 		var info os.FileInfo
 		if info, err = file.Stat(); err == nil && info.IsDir() {
@@ -384,6 +403,7 @@ func (sys *Daemon) Load(name string) (u *Unit, err error) {
 		}
 		if err != nil {
 			u.Log.Errorf("%s", err)
+			file.Close()
 			return u, err
 		}
 
@@ -397,29 +417,15 @@ func (sys *Daemon) Load(name string) (u *Unit, err error) {
 				u.Log.Errorf("Error parsing definition: %s", err)
 			}
 			u.loaded = unit.Error
+			file.Close()
 			return u, err
 		}
 
 		u.loaded = unit.Loaded
-
-		return u, err
+		return u, file.Close()
 	}
 
 	return nil, ErrNotFound
-}
-
-func (sys *Daemon) parse(name string) (u *Unit, err error) {
-	var v unit.Interface
-	switch filepath.Ext(name) {
-	case ".target":
-		v = &target.Unit{}
-	case ".service":
-		v = &service.Unit{}
-	default:
-		panic("Trying to load an unsupported unit type")
-	}
-
-	return sys.Supervise(name, v)
 }
 
 // pathset returns a slice of paths to definitions of supported unit types found in path specified

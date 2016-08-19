@@ -21,7 +21,7 @@
 package cli
 
 import (
-	"log"
+	log "github.com/Sirupsen/logrus"
 
 	"github.com/spf13/cobra"
 )
@@ -32,8 +32,8 @@ var startCmd = &cobra.Command{
 	Short: "Start (activate) one or more units",
 	Long:  `TODO: add description`,
 	Run: func(cmd *cobra.Command, args []string) {
-		if err := sys.Do("start", args...); err != nil {
-			log.Fatalln(err.Error())
+		if err := client.Call("Server.Start", args, nil); err != nil {
+			log.Error(err)
 		}
 	},
 }

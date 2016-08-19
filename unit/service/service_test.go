@@ -12,14 +12,13 @@ import (
 
 func TestDefine(t *testing.T) {
 	sv := Unit{}
-
-	err := sv.Define(strings.NewReader(`[Service]
-ExecStart=/bin/echo test`))
-	assert.NoError(t, err, "sv.Define")
+	assert.NoError(t, sv.Define(strings.NewReader(`[Service]
+ExecStart=/bin/echo test`)), "sv.Define")
 	assert.Equal(t, sv.Definition.Service.Type, DEFAULT_TYPE, "sv.Definition.Service.Type")
 
-	sv = Unit{}
+	var err error
 
+	sv = Unit{}
 	if err = sv.Define(strings.NewReader(`[Service]`)); assert.Error(t, err, "sv.Define with wrong definition") {
 		if me, ok := err.(unit.MultiError); assert.True(t, ok, "error is MultiError") {
 			if pe, ok := me[0].(unit.ParseError); assert.True(t, ok, "error is ParseError") {
@@ -88,8 +87,8 @@ func TestActive(t *testing.T) {
 	//sv = &Unit{}
 	//assert.Equal(t, unit.Reloading, sv.Active())
 
-	sv = Unit{}
-	assert.Equal(t, unit.Inactive, sv.Active())
+	//sv = Unit{}
+	//assert.Equal(t, unit.Inactive, sv.Active())
 
 }
 

@@ -7,9 +7,30 @@ import (
 	"strings"
 
 	"github.com/rvolosatovs/systemgo/unit"
+
+	log "github.com/Sirupsen/logrus"
 )
 
 const DEFAULT_TYPE = "simple"
+
+const (
+	dead         = "dead"
+	startPre     = "startPre"
+	start        = "start"
+	startPost    = "startPost"
+	running      = "running"
+	exited       = "exited" // not running anymore, but RemainAfterExit true for this unit
+	reload       = "reload"
+	stop         = "stop"
+	stopSigabrt  = "stopSigabrt" // watchdog timeout
+	stopSigterm  = "stopSigterm"
+	stopSigkill  = "stopSigkill"
+	stopPost     = "stopPost"
+	finalSigterm = "finalSigterm"
+	finalSigkill = "finalSigkill"
+	failed       = "failed"
+	autoRestart  = "autoRestart"
+)
 
 var supported = map[string]bool{
 	"oneshot": true,
@@ -32,9 +53,11 @@ type Definition struct {
 	Service struct {
 		Type                            string
 		ExecStart, ExecStop, ExecReload string
-		PIDFile                         string
-		Restart                         string
-		RemainAfterExit                 bool
+		//Restart                         string
+		//RestartSec                      int
+		RemainAfterExit  bool
+		WorkingDirectory string
+		//PIDFile          string
 	}
 }
 
@@ -42,8 +65,14 @@ func Supported(typ string) (is bool) {
 	return supported[typ]
 }
 
+//func (sv *Unit) String() string {
+//return sv.Service.ExecStart
+//}
+
 // Define attempts to fill the sv definition by parsing r
 func (sv *Unit) Define(r io.Reader /*, errch chan<- error*/) (err error) {
+	log.WithField("r", r).Debugf("sv.Define")
+
 	def := Definition{}
 	def.Service.Type = DEFAULT_TYPE
 
@@ -70,80 +99,85 @@ func (sv *Unit) Define(r io.Reader /*, errch chan<- error*/) (err error) {
 
 	cmd := strings.Fields(def.Service.ExecStart)
 	sv.Cmd = exec.Command(cmd[0], cmd[1:]...)
+	sv.Cmd.Dir = sv.Definition.Service.WorkingDirectory
 
 	return nil
 }
 
 // Start executes the command specified in service definition
 func (sv *Unit) Start() (err error) {
+	e := log.WithField("ExecStart", sv.Definition.Service.ExecStart)
+
+	e.Debug("sv.Start")
+
 	switch sv.Definition.Service.Type {
 	case "simple":
 		if err = sv.Cmd.Start(); err == nil {
 			go sv.Cmd.Wait()
 		}
-		return
 	case "oneshot":
-		return sv.Cmd.Run()
+		err = sv.Cmd.Run()
 	default:
 		panic("Unknown service type")
 	}
+
+	e.WithField("err", err).Debug("started")
+	return
 }
 
 // Stop stops execution of the command specified in service definition
 func (sv *Unit) Stop() (err error) {
-	if sv.Cmd.Process == nil {
-		return unit.ErrNotStarted
+	if cmd := strings.Fields(sv.Definition.Service.ExecStop); len(cmd) > 0 {
+		return exec.Command(cmd[0], cmd[1:]...).Run()
 	}
-
-	return sv.Process.Kill()
+	if sv.Cmd.Process != nil {
+		return sv.Cmd.Process.Kill()
+	}
+	return nil
 }
 
 // Sub reports the sub status of a service
-func (sv *Unit) Sub() Sub {
-	if sv.Cmd == nil {
-		panic(unit.ErrNotParsed)
-	}
+func (sv *Unit) Sub() string {
+	log.WithField("sv", sv).Debugf("sv.Sub")
 
 	switch {
 	case sv.Cmd.Process == nil:
 		// Service has not been started yet
-		return Dead
+		return dead
 
 	case sv.Cmd.ProcessState == nil:
 		// Wait has not returned yet
-		return Running
+		return running
 
 	case sv.ProcessState.Exited(), sv.ProcessState.Success():
 		if sv.Definition.Service.RemainAfterExit {
-			return Exited
+			return exited
 		}
-		return Dead
+		return dead
 
 	default:
 		// Service process has finished, but did not return a 0 exit code
-		return Failed
+		return failed
 	}
 }
 
-func (sv *Unit) Active() unit.Activation {
-	return sv.Sub().Active()
-}
-
 // Active reports activation status of a service
-func (s Sub) Active() unit.Activation {
+func (sv *Unit) Active() unit.Activation {
+	log.WithField("sv", sv).Debugf("sv.Active")
+
 	// based of Systemd transtition table found in https://goo.gl/oEjikJ
-	switch s {
-	case Dead:
+	switch sv.Sub() {
+	case dead:
 		return unit.Inactive
-	case Failed:
+	case failed:
 		return unit.Failed
-	case Reload:
+	case reload:
 		return unit.Reloading
-	case Running, Exited:
+	case running, exited:
 		return unit.Active
-	case Start, StartPre, StartPost, AutoRestart:
+	case start, startPre, startPost, autoRestart:
 		return unit.Activating
-	case Stop, StopSigabrt, StopPost, StopSigkill, StopSigterm, FinalSigkill, FinalSigterm:
+	case stop, stopSigabrt, stopPost, stopSigkill, stopSigterm, finalSigkill, finalSigterm:
 		return unit.Deactivating
 	default:
 		panic("Unknown service sub state")

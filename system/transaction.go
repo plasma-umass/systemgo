@@ -1,6 +1,7 @@
 package system
 
 import (
+	"errors"
 	"fmt"
 
 	log "github.com/Sirupsen/logrus"
@@ -16,6 +17,8 @@ type prospectiveJobs struct {
 }
 
 func newTransaction() (tr *transaction) {
+	log.Debugf("newTransaction")
+
 	return &transaction{
 		unmerged: map[*Unit]*prospectiveJobs{},
 		merged:   map[*Unit]*job{},
@@ -23,6 +26,8 @@ func newTransaction() (tr *transaction) {
 }
 
 func (tr *transaction) Run() (err error) {
+	log.WithField("transaction", tr).Debugf("tr.Run")
+
 	if err = tr.merge(); err != nil {
 		return
 	}
@@ -33,6 +38,11 @@ func (tr *transaction) Run() (err error) {
 	}
 
 	for _, j := range ordering {
+		if j.IsRedundant() {
+			continue
+		}
+
+		log.Debugf("dispatching job for %s", j.unit.Name())
 		go j.Run()
 	}
 	return
@@ -41,8 +51,13 @@ func (tr *transaction) Run() (err error) {
 // recursively adds jobs to transaction
 // tries to load dependencies not already present
 func (tr *transaction) add(typ jobType, u *Unit, parent *job, required, anchor bool) (err error) {
-
-	log.WithField("func", "add").Debug(typ, u, parent, required, anchor)
+	log.WithFields(log.Fields{
+		"typ":      typ,
+		"u":        u,
+		"parent":   parent,
+		"required": required,
+		"anchor":   anchor,
+	}).Debug("tr.add")
 	// TODO: decide if these checks are necessary to do here,
 	// as they are performed by the unit method calls already
 	//
@@ -91,7 +106,7 @@ func (tr *transaction) add(typ jobType, u *Unit, parent *job, required, anchor b
 		}
 	}
 
-	if isNew {
+	if isNew && typ != stop {
 		for _, name := range u.Conflicts() {
 			dep, err := u.System.Get(name)
 			if err != nil {
@@ -128,6 +143,8 @@ func (tr *transaction) add(typ jobType, u *Unit, parent *job, required, anchor b
 }
 
 func (tr *transaction) merge() (err error) {
+	log.Debug("tr.merge")
+
 	for u, prospective := range tr.unmerged {
 		var merged *job
 
@@ -205,6 +222,8 @@ func (tr *transaction) merge() (err error) {
 // removes all references to j
 // recurses on orphaned and broken jobs
 func (tr *transaction) delete(j *job) {
+	log.WithField("j", j).Debug("tr.delete")
+
 	delete(tr.merged, j.unit)
 
 	for deps, f := range map[*set]func(*job){
@@ -251,10 +270,17 @@ func canMerge(what, with jobType) (ok bool) {
 }
 
 func (tr *transaction) order() (ordering []*job, err error) {
+	log.Debug("tr.order")
+
 	g := newGraph()
 
 	for u, j := range tr.merged {
-		log.Debugf("Checking after of %s...", j)
+		if j.typ == stop {
+			// TODO Introduce stop job ordering(if needed)
+			continue
+		}
+
+		log.Debugf("Checking after of %s...", j.unit.Name())
 		for _, depname := range u.After() {
 			var dep *Unit
 			if dep, err = u.System.Unit(depname); err != nil {
@@ -268,7 +294,7 @@ func (tr *transaction) order() (ordering []*job, err error) {
 			}
 		}
 
-		log.Debugf("Checking before of %s...", j)
+		log.Debugf("Checking before of %s...", j.unit.Name())
 		for _, depname := range u.Before() {
 			var dep *Unit
 			if dep, err = u.System.Unit(depname); err != nil {
@@ -284,8 +310,6 @@ func (tr *transaction) order() (ordering []*job, err error) {
 	}
 
 	g.ordering = make([]*job, 0, len(tr.merged))
-
-	log.Debugf("starting DFS on graph:\n%+v", g)
 	for _, j := range tr.merged {
 		if err = g.order(j); err != nil {
 			return nil, fmt.Errorf("Dependency cycle determined:\njob for %s depends on %s", j.unit.Name(), err)
@@ -293,4 +317,52 @@ func (tr *transaction) order() (ordering []*job, err error) {
 	}
 
 	return g.ordering, nil
+}
+
+type graph struct {
+	visited, ordered set
+	ordering         []*job
+}
+
+func newGraph() (g *graph) {
+	log.Debugf("newGraph")
+
+	return &graph{
+		visited: set{},
+		ordered: set{},
+	}
+}
+
+var errBlank = errors.New("")
+
+func (g *graph) order(j *job) (err error) {
+	log.WithField("j", j).Debugf("g.order")
+
+	if g.ordered.Contains(j) {
+		return nil
+	}
+
+	if g.visited.Contains(j) {
+		return errBlank
+	}
+
+	g.visited.Put(j)
+
+	for depJob := range j.after {
+		if err = g.order(depJob); err != nil {
+			if err == errBlank {
+				return fmt.Errorf("%s\n", depJob.unit.Name())
+			}
+			return fmt.Errorf("%v\n%s depends on %s", j.unit.Name(), j.unit.Name(), err)
+		}
+	}
+
+	delete(g.visited, j)
+
+	if !g.ordered.Contains(j) {
+		g.ordering = append(g.ordering, j)
+		g.ordered.Put(j)
+	}
+
+	return nil
 }

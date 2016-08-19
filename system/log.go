@@ -10,21 +10,14 @@ import (
 // Byte size of log contents read to buffer
 const BUFFER_SIZE = 10000
 
-var debug bool
+type debugHook struct{}
 
-type errorHook struct {
-	Source string
+func (h *debugHook) Levels() []log.Level {
+	return log.AllLevels
 }
 
-func (h *errorHook) Levels() []log.Level {
-	return []log.Level{log.ErrorLevel}
-}
-
-func (h *errorHook) Fire(e *log.Entry) error {
-	entry := *e
-	entry.Logger = log.StandardLogger()
-	entry.Message = h.Source + ": " + entry.Message
-	entry.Println("test")
+func (h *debugHook) Fire(e *log.Entry) error {
+	log.WithFields(e.Data).Debug("\t", e.Message)
 	return nil
 }
 
@@ -46,6 +39,7 @@ func NewLog() (l *Log) {
 			Level: log.InfoLevel,
 			Hooks: log.LevelHooks{},
 		}
+		l.Hooks.Add(&debugHook{})
 	}()
 	return &Log{
 		buffer: bytes.NewBuffer(make([]byte, 0, BUFFER_SIZE)),

@@ -2,7 +2,7 @@ package system
 
 import (
 	"errors"
-	"fmt"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sync"
@@ -44,6 +44,10 @@ func NewUnit(v unit.Interface) (u *Unit) {
 	}
 }
 
+//func (u *Unit) String() string {
+//return u.Name()
+//}
+
 func (u *Unit) Path() string {
 	return u.path
 }
@@ -54,31 +58,48 @@ func (u *Unit) Loaded() unit.Load {
 	return u.loaded
 }
 
+func (u *Unit) IsDead() bool {
+	return u.Active() == unit.Inactive
+}
 func (u *Unit) IsActive() bool {
 	return u.Active() == unit.Active
 }
-func (u *Unit) IsStarting() bool {
+func (u *Unit) IsActivating() bool {
 	return u.Active() == unit.Activating
 }
+func (u *Unit) IsDeactivating() bool {
+	return u.Active() == unit.Deactivating
+}
+func (u *Unit) IsReloading() bool {
+	return u.Active() == unit.Reloading
+}
+
 func (u *Unit) IsLoaded() bool {
 	return u.Loaded() == unit.Loaded
 }
 
+func (u *Unit) IsReloader() (ok bool) {
+	_, ok = u.Interface.(unit.Reloader)
+	return
+}
+
 func (u *Unit) Active() (st unit.Activation) {
-	switch u.Sub() {
-	case starting:
-		return unit.Activating
-	case stopping:
-		return unit.Deactivating
-	case reloading:
-		return unit.Reloading
-	default:
-		return u.Interface.Active()
+	if u.jobRunning() {
+		switch u.job.typ {
+		case start:
+			return unit.Activating
+		case stop:
+			return unit.Deactivating
+		case reload:
+			return unit.Reloading
+		}
 	}
+
+	return u.Interface.Active()
 }
 
 func (u *Unit) Sub() string {
-	if u.job != nil && u.job.IsRunning() {
+	if u.jobRunning() {
 		switch u.job.typ {
 		case start:
 			return starting
@@ -92,7 +113,11 @@ func (u *Unit) Sub() string {
 	return u.Interface.Sub()
 }
 
-func (u *Unit) Status() fmt.Stringer {
+func (u *Unit) jobRunning() bool {
+	return u.job != nil && u.job.IsRunning()
+}
+
+func (u *Unit) Status() unit.Status {
 	st := unit.Status{
 		Load: unit.LoadStatus{
 			Path:   u.Path(),
@@ -104,6 +129,12 @@ func (u *Unit) Status() fmt.Stringer {
 			Sub:   u.Sub(),
 		},
 	}
+
+	var err error
+	if st.Log, err = ioutil.ReadAll(u.Log); err != nil {
+		u.Log.Errorf("Error reading log: %s", err)
+	}
+
 	// TODO deal with different unit types requiring different status
 	// something like u.Interface.HasX() ?
 	switch u.Interface.(type) {
@@ -112,16 +143,6 @@ func (u *Unit) Status() fmt.Stringer {
 	default:
 		return st
 	}
-}
-
-func (u *Unit) IsReloader() (ok bool) {
-	_, ok = u.Interface.(unit.Reloader)
-	return
-}
-
-func (u *Unit) Reload() (err error) {
-	// TODO reload transaction
-	return
 }
 
 // Requires returns a slice of unit names as found in definition and absolute paths
@@ -190,7 +211,7 @@ func (u *Unit) addRequiresDep(dep *Unit) (err error) {
 }
 
 func linkDep(dir string, dep *Unit) (err error) {
-	if err = os.Mkdir(dir, 0755); err != nil && err != os.ErrExist {
+	if err = os.Mkdir(dir, 0755); err != nil && !os.IsExist(err) {
 		return err
 	}
 
@@ -227,13 +248,25 @@ func (u *Unit) removeRequiresDep(dep *Unit) (err error) {
 }
 
 func unlinkDep(dir string, dep *Unit) (err error) {
-	if err = os.Remove(filepath.Join(dir, dep.Name())); err != nil && err != os.ErrNotExist {
+	if err = os.Remove(filepath.Join(dir, dep.Name())); err != nil && !os.IsNotExist(err) {
 		return
 	}
 	return nil
 }
 
+func (u *Unit) Reload() (err error) {
+	log.WithField("u", u).Debugf("u.Reload")
+
+	tr := newTransaction()
+	if err = tr.add(reload, u, nil, true, true); err != nil {
+		return
+	}
+	return tr.Run()
+}
+
 func (u *Unit) reload() (err error) {
+	log.WithField("u", u).Debugf("u.reload")
+
 	reloader, ok := u.Interface.(unit.Reloader)
 	if !ok {
 		return ErrNoReload
@@ -242,6 +275,8 @@ func (u *Unit) reload() (err error) {
 }
 
 func (u *Unit) Start() (err error) {
+	log.WithField("unit", u.Name()).Debugf("u.Start")
+
 	tr := newTransaction()
 	if err = tr.add(start, u, nil, true, true); err != nil {
 		return
@@ -250,9 +285,11 @@ func (u *Unit) Start() (err error) {
 }
 
 func (u *Unit) start() (err error) {
-	log.Debugf("start called on %v", u)
+	e := log.WithField("unit", u.Name())
+	e.Debugf("u.start")
 
 	if !u.IsLoaded() {
+		e.Debug("not loaded")
 		return ErrNotLoaded
 	}
 
@@ -260,13 +297,17 @@ func (u *Unit) start() (err error) {
 
 	starter, ok := u.Interface.(unit.Starter)
 	if !ok {
+		e.Debugf("Interface is not unit.Starter")
 		return nil
 	}
 
+	e.Debugf("Interface.Start")
 	return starter.Start()
 }
 
 func (u *Unit) Stop() (err error) {
+	log.WithField("u", u).Debugf("u.Stop")
+
 	tr := newTransaction()
 	if err = tr.add(stop, u, nil, true, true); err != nil {
 		return
@@ -275,7 +316,7 @@ func (u *Unit) Stop() (err error) {
 }
 
 func (u *Unit) stop() (err error) {
-	log.Debugf("stop called on %v", u)
+	log.WithField("u", u).Debugf("u.stop")
 
 	if !u.IsLoaded() {
 		return ErrNotLoaded
