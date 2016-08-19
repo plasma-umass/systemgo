@@ -183,13 +183,13 @@ func (sys *Daemon) Isolate(names ...string) (err error) {
 		return
 	}
 
-	units := sys.Units()
-	names = make([]string, 0, len(units)-len(tr.unmerged))
-	for _, u := range units {
-		if _, ok := tr.unmerged[u]; !ok {
-			if err = tr.add(stop, u, nil, true, true); err != nil {
-				return
-			}
+	for _, u := range sys.Units() {
+		if _, ok := tr.unmerged[u]; ok {
+			continue
+		}
+
+		if err = tr.add(stop, u, nil, true, true); err != nil {
+			return
 		}
 	}
 	return tr.Run()
