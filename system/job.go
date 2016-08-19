@@ -56,6 +56,19 @@ func newJob(typ jobType, u *Unit) (j *job) {
 //return fmt.Sprintf("%s job for %s", j.typ, j.unit.Name())
 //}
 
+func (j *job) IsRedundant() bool {
+	switch j.typ {
+	case stop:
+		return j.unit.IsDeactivating() || j.unit.IsDead()
+	case start:
+		return j.unit.IsActivating() || j.unit.IsActive()
+	case reload:
+		return j.unit.IsReloading()
+	default:
+		return false
+	}
+}
+
 func (j *job) IsRunning() bool {
 	return !j.executed
 }

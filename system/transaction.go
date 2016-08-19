@@ -38,6 +38,10 @@ func (tr *transaction) Run() (err error) {
 	}
 
 	for _, j := range ordering {
+		if j.IsRedundant() {
+			continue
+		}
+
 		log.Debugf("dispatching job for %s", j.unit.Name())
 		go j.Run()
 	}
