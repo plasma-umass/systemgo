@@ -17,7 +17,7 @@ An init system in Go, intended to run on [Browsix](https://github.com/plasma-uma
     - [x] Requires
     - [x] After
     - [x] Before
-- [ ] Systemctl
+- [x] Systemctl
 
 # Supported Systemd functionality
 ## Commands
@@ -27,7 +27,7 @@ An init system in Go, intended to run on [Browsix](https://github.com/plasma-uma
 - [x] restart
 - [x] status
 - [x] isolate
-- [ ] list-units
+- [x] list-units
 - [x] enable
 - [x] disable
 

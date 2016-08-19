@@ -1,5 +1,2 @@
 - [ ] Let u.Define return <-chan error ?
-- [ ] Use GRPC for communcation with init
-- [ ] Systemctl output formatting(tabwriter)
 - [ ] Systemctl help, descriptions
-- [ ] Make Systemgo run on Browsix
