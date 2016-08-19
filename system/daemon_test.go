@@ -123,14 +123,13 @@ func TestStart(t *testing.T) {
 
 	sys := New()
 
-	units := map[string]*Unit{}
-	for name, m := range mocks {
-		u, err := sys.Supervise(name, m)
+	for name, mock := range mocks {
+		mock.MockInterface.EXPECT().Active().Return(unit.Inactive).AnyTimes()
+
+		u, err := sys.Supervise(name, mock)
 		require.NoError(t, err)
 
 		u.loaded = unit.Loaded
-
-		units[name] = u
 	}
 
 	calls := make([]*gomock.Call, len(sequence))
@@ -139,27 +138,13 @@ func TestStart(t *testing.T) {
 	}
 	gomock.InOrder(calls...)
 
-	assert.NoError(t, sys.Start("c"), "sys.Start("+"c"+")")
+	require.NoError(t, sys.Start("c"), "sys.Start("+"c"+")")
 
-	wg := &sync.WaitGroup{}
-	for _, u := range units {
-		wg.Add(1)
-		go func(u *Unit) {
-			defer wg.Done()
-
-			for u.job == nil {
-				log.Warnf("%s job still nil", u.Name())
-				time.Sleep(100 * time.Millisecond)
-			}
-
-			log.Infof("Waiting for %s job to finish", u.Name())
-			u.job.Wait()
-			log.Debugf("%s job finished", u.Name())
-
-			assert.True(t, u.job.Success())
-		}(u)
+	names := make([]string, 0, len(mocks))
+	for name := range mocks {
+		names = append(names, name)
 	}
-	wg.Wait()
+	waitForJobs(t, sys, names...)
 }
 
 func TestStop(t *testing.T) {
@@ -168,6 +153,7 @@ func TestStop(t *testing.T) {
 
 	m := newMock(ctrl)
 	m.MockStopper.EXPECT().Stop().Return(nil).Times(1)
+	m.MockInterface.EXPECT().Active().Return(unit.Active).AnyTimes()
 
 	sys := New()
 
@@ -175,20 +161,70 @@ func TestStop(t *testing.T) {
 	u.loaded = unit.Loaded
 	require.NoError(t, err)
 
-	assert.NoError(t, sys.Stop(u.Name()))
-	for u.job == nil {
-		log.Warnf("%s job still nil", u.Name())
-		time.Sleep(100 * time.Millisecond)
-	}
-	u.job.Wait()
+	require.NoError(t, sys.Stop("TestStop"))
+	waitForJobs(t, sys, "TestStop")
+}
 
-	assert.True(t, u.job.Success())
+func TestIsolate(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	sys := New()
+
+	mocks := map[string]*mockUnit{
+		"a": newMock(ctrl),
+		"b": newMock(ctrl),
+		"c": newMock(ctrl),
+	}
+
+	mocks["a"].MockStopper.EXPECT().Stop().Return(nil).Times(1)
+	mocks["b"].MockStopper.EXPECT().Stop().Return(nil).Times(1)
+
+	empty(mocks["c"], "wants", "before", "conflicts", "after", "requires")
+
+	for name, mock := range mocks {
+		mock.MockInterface.EXPECT().Active().Return(unit.Active).AnyTimes()
+
+		u, err := sys.Supervise(name, mock)
+		require.NoError(t, err)
+
+		u.loaded = unit.Loaded
+	}
+
+	require.NoError(t, sys.Isolate("c"), "sys.Isolate")
+
+	names := make([]string, 0, len(mocks))
+	for name := range mocks {
+		names = append(names, name)
+	}
+	waitForJobs(t, sys, "a", "b")
+}
+
+func waitForJobs(t *testing.T, sys *Daemon, names ...string) {
+	wg := &sync.WaitGroup{}
+	for _, name := range names {
+		u, err := sys.Unit(name)
+		require.NoError(t, err, "sys.Unit", name)
+
+		wg.Add(1)
+		go func(name string, u *Unit) {
+			defer wg.Done()
+
+			for u.job == nil {
+				log.Warnf("%s job still nil", name)
+				time.Sleep(100 * time.Millisecond)
+			}
+
+			log.Warnf("Waiting for %s job to finish", name)
+			u.job.Wait()
+
+			assert.True(t, u.job.Success())
+		}(name, u)
+	}
+	wg.Wait()
 }
 
 func TestEnable(t *testing.T) {
-	defer log.SetLevel(log.GetLevel())
-	log.SetLevel(log.DebugLevel)
-
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -220,7 +256,6 @@ func TestEnable(t *testing.T) {
 		u.loaded = unit.Loaded
 	}
 
-	log.Debug(sys.units)
 	require.NoError(t, sys.Enable("test.service"), "sys.Enable")
 
 	for _, suffix := range []string{"wants", "requires"} {
