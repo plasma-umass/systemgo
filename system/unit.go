@@ -277,9 +277,9 @@ func (u *Unit) Start() (err error) {
 func (u *Unit) start() (err error) {
 	e := log.WithField("unit", u.Name())
 	e.Debugf("u.start")
-	defer e.Debug("started")
 
 	if !u.IsLoaded() {
+		e.Debug("not loaded")
 		return ErrNotLoaded
 	}
 
