@@ -31,7 +31,7 @@ type Daemon struct {
 	// System state
 	state State
 
-	// Starting time
+	// System starting time
 	since time.Time
 
 	// System log
@@ -109,7 +109,7 @@ func (sys *Daemon) IsEnabled(name string) (st unit.Enable, err error) {
 	//if u, err = sys.Unit(name); err == nil && sys.Enabled[u] {
 	//st = unit.Enabled
 	//}
-	return unit.Enabled, ErrNotImplemented
+	return -1, ErrNotImplemented
 }
 
 // IsActive returns activation state of the unit held in-memory under specified name
@@ -290,7 +290,7 @@ func (sys *Daemon) Units() (units []*Unit) {
 // Unit looks up unit name in the internal hasmap and returns the unit created associated with it
 // or nil and ErrNotFound, if it does not exist
 func (sys *Daemon) Unit(name string) (u *Unit, err error) {
-	log.WithField("name", name).Debugf("sys.Unit")
+	log.WithField("name", name).Debug("sys.Unit")
 
 	var ok bool
 	if u, ok = sys.units[name]; !ok {
@@ -303,7 +303,7 @@ func (sys *Daemon) Unit(name string) (u *Unit, err error) {
 // sys.Load(name) if it can not be found
 // If error is returned, it will be error from sys.Load(name)
 func (sys *Daemon) Get(name string) (u *Unit, err error) {
-	log.WithField("name", name).Debugf("sys.Get")
+	log.WithField("name", name).Debug("sys.Get")
 
 	if u, err = sys.Unit(name); err != nil || !u.IsLoaded() {
 		return sys.load(name)

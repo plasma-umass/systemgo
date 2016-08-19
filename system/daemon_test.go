@@ -98,9 +98,6 @@ func TestPathset(t *testing.T) {
 }
 
 func TestStart(t *testing.T) {
-	defer log.SetLevel(log.GetLevel())
-	log.SetLevel(log.DebugLevel)
-
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -186,6 +183,67 @@ func TestStop(t *testing.T) {
 	u.job.Wait()
 
 	assert.True(t, u.job.Success())
+}
+
+func TestEnable(t *testing.T) {
+	defer log.SetLevel(log.GetLevel())
+	log.SetLevel(log.DebugLevel)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	sys := New()
+
+	m := mock_unit.NewMockInterface(ctrl)
+	m.EXPECT().WantedBy().Return([]string{"test.target"}).Times(2)
+	m.EXPECT().RequiredBy().Return([]string{"test.target"}).Times(2)
+
+	var err error
+
+	for name, iface := range map[string]unit.Interface{
+		"test.target":  nil,
+		"test.service": m,
+	} {
+		e := log.WithField("name", name)
+
+		var u *Unit
+		if u, err = sys.Supervise(name, iface); err != nil {
+			e.WithField("err", err).Fatal("sys.Supervise")
+		}
+
+		var f *os.File
+		if f, err = ioutil.TempFile("", name); err != nil {
+			e.WithField("err", err).Fatal("ioutil.TempDir")
+		}
+
+		u.path = f.Name()
+		u.loaded = unit.Loaded
+	}
+
+	log.Debug(sys.units)
+	require.NoError(t, sys.Enable("test.service"), "sys.Enable")
+
+	for _, suffix := range []string{"wants", "requires"} {
+		path, err := os.Readlink(filepath.Join(sys.units["test.target"].path+"."+suffix, "test.service"))
+		require.NoError(t, err, "os.Readlink")
+		assert.Equal(t, path, sys.units["test.service"].path, "link path")
+	}
+
+	// TODO implement
+	//st, err := sys.IsEnabled("test.service")
+	//assert.NoError(t, err, "sys.IsEnabled")
+	//assert.Equal(t, unit.Enabled, st, "sys.IsEnabled")
+
+	require.NoError(t, sys.Disable("test.service"), "sys.Disable")
+	for _, suffix := range []string{"wants", "requires"} {
+		_, err := os.Open(filepath.Join(sys.units["test.target"].path+"."+suffix, "test.service"))
+		assert.True(t, os.IsNotExist(err), "os.Open")
+	}
+
+	// TODO implement
+	//st, err = sys.IsEnabled("test.service")
+	//assert.NoError(t, err, "sys.IsEnabled")
+	//assert.Equal(t, unit.Disabled, st, "sys.IsEnabled")
 }
 
 func empty(m *mockUnit, methods ...string) {
