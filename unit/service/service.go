@@ -109,19 +109,20 @@ func (sv *Unit) Start() (err error) {
 	e := log.WithField("ExecStart", sv.Definition.Service.ExecStart)
 
 	e.Debug("sv.Start")
-	defer e.WithField("err", err).Debug("started")
 
 	switch sv.Definition.Service.Type {
 	case "simple":
 		if err = sv.Cmd.Start(); err == nil {
 			go sv.Cmd.Wait()
 		}
-		return
 	case "oneshot":
-		return sv.Cmd.Run()
+		err = sv.Cmd.Run()
 	default:
 		panic("Unknown service type")
 	}
+
+	e.WithField("err", err).Debug("started")
+	return
 }
 
 // Stop stops execution of the command specified in service definition
