@@ -1,8 +1,6 @@
 package system
 
 import (
-	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,13 +13,33 @@ import (
 	log "github.com/Sirupsen/logrus"
 )
 
-var ErrDepConflict = fmt.Errorf("Error stopping conflicting unit")
-var ErrNotActive = fmt.Errorf("Unit is not active")
-var ErrExists = fmt.Errorf("Unit already exists")
-
+// Default paths to search for unit paths - Daemon uses those, if none are specified
 var DEFAULT_PATHS = []string{"/etc/systemd/system/", "/run/systemd/system", "/lib/systemd/system"}
 
+var supported = map[string]bool{
+	".service": true,
+	".target":  true,
+	".mount":   false,
+	".socket":  false,
+}
+
+// SupportedSuffix returns a bool indicating if suffix represents a unit type,
+// which is supported by Systemgo
+func SupportedSuffix(suffix string) bool {
+	return supported[suffix]
+}
+
+// Supported returns a bool indicating if filename represents a unit type,
+// which is supported by Systemgo
+func Supported(filename string) bool {
+	return SupportedSuffix(filepath.Ext(filename))
+}
+
+// Daemon supervises instances of Unit
 type Daemon struct {
+	// System log
+	Log *Log
+
 	// Map of created units (name -> *Unit)
 	units map[string]*Unit
 
@@ -34,13 +52,10 @@ type Daemon struct {
 	// System starting time
 	since time.Time
 
-	// System log
-	Log *Log
-
 	mutex sync.Mutex
 }
 
-// New returns *Daemon ready to use
+// New returns an instance of a Daemon ready to use
 func New() (sys *Daemon) {
 	return &Daemon{
 		units: make(map[string]*Unit),
@@ -69,41 +84,10 @@ func (sys *Daemon) Since() (t time.Time) {
 	return sys.since
 }
 
-// Status returns status of the system
-// If error is returned it is going to be an error,
-// returned by the call to ioutil.ReadAll(sys.Log)
-func (sys *Daemon) Status() (st Status, err error) {
-	st = Status{
-		State: sys.state,
-		Since: sys.since,
-	}
-
-	st.Log, err = ioutil.ReadAll(sys.Log)
-
-	return
-}
-
-var supported = map[string]bool{
-	".service": true,
-	".target":  true,
-	".mount":   false,
-	".socket":  false,
-}
-
-// SupportedSuffix returns a bool indicating if suffix represents a unit type,
-// which is supported by Systemgo
-func SupportedSuffix(suffix string) bool {
-	return supported[suffix]
-}
-
-// Supported returns a bool indicating if filename represents a unit type,
-// which is supported by Systemgo
-func Supported(filename string) bool {
-	return SupportedSuffix(filepath.Ext(filename))
-}
-
-// IsEnabled returns enable state of the unit held in-memory under specified name
+// IsEnabled returns enable state of the unit held in-memory under specified name.
 // If error is returned, it is going to be ErrNotFound
+//
+// TODO
 func (sys *Daemon) IsEnabled(name string) (st unit.Enable, err error) {
 	//var u *Unit
 	//if u, err = sys.Unit(name); err == nil && sys.Enabled[u] {
@@ -112,7 +96,7 @@ func (sys *Daemon) IsEnabled(name string) (st unit.Enable, err error) {
 	return -1, ErrNotImplemented
 }
 
-// IsActive returns activation state of the unit held in-memory under specified name
+// IsActive returns activation state of the unit held in-memory under specified name.
 // If error is returned, it is going to be ErrNotFound
 func (sys *Daemon) IsActive(name string) (st unit.Activation, err error) {
 	var u *Unit
@@ -122,7 +106,7 @@ func (sys *Daemon) IsActive(name string) (st unit.Activation, err error) {
 	return
 }
 
-// StatusOf returns status of the unit held in-memory under specified name
+// StatusOf returns status of the unit held in-memory under specified name.
 // If error is returned, it is going to be ErrNotFound
 func (sys *Daemon) StatusOf(name string) (st unit.Status, err error) {
 	var u *Unit
@@ -131,24 +115,6 @@ func (sys *Daemon) StatusOf(name string) (st unit.Status, err error) {
 	}
 
 	return u.Status(), nil
-}
-
-func (sys *Daemon) failedCount() (n int) {
-	for _, u := range sys.units {
-		if j := u.job; j != nil && j.Failed() {
-			n++
-		}
-	}
-	return
-}
-
-func (sys *Daemon) jobCount() (n int) {
-	for _, u := range sys.units {
-		if u.job != nil {
-			n++
-		}
-	}
-	return
 }
 
 // Start gets names from internal hashmap, creates a new start transaction and runs it
@@ -300,7 +266,7 @@ func (sys *Daemon) Unit(name string) (u *Unit, err error) {
 }
 
 // Get looks up the unit name in the internal hasmap of loaded units and calls
-// sys.Load(name) if it can not be found
+// sys.Load(name) if it can not be found.
 // If error is returned, it will be error from sys.Load(name)
 func (sys *Daemon) Get(name string) (u *Unit, err error) {
 	log.WithField("name", name).Debug("sys.Get")
@@ -311,7 +277,7 @@ func (sys *Daemon) Get(name string) (u *Unit, err error) {
 	return
 }
 
-// Supervise creates a *Unit wrapping v and stores it in internal hashmap
+// Supervise creates a *Unit wrapping v and stores it in internal hashmap.
 // If a unit with name specified already exists - nil and ErrExists are returned
 func (sys *Daemon) Supervise(name string, v unit.Interface) (u *Unit, err error) {
 	log.WithFields(log.Fields{
@@ -416,12 +382,12 @@ func (sys *Daemon) load(name string) (u *Unit, err error) {
 			} else {
 				u.Log.Errorf("Error parsing definition: %s", err)
 			}
-			u.loaded = unit.Error
+			u.load = unit.Error
 			file.Close()
 			return u, err
 		}
 
-		u.loaded = unit.Loaded
+		u.load = unit.Loaded
 		return u, file.Close()
 	}
 

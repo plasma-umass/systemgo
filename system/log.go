@@ -7,7 +7,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 )
 
-// Byte size of log contents read to buffer
+// Maximum number of bytes kept if log buffer
 const BUFFER_SIZE = 10000
 
 type debugHook struct{}
@@ -22,6 +22,7 @@ func (h *debugHook) Fire(e *log.Entry) error {
 }
 
 // Log uses log.Logger to write data to embedded bytes.Buffer
+// Keeps up to 10000 bytes of data in-memory
 type Log struct {
 	*log.Logger
 	*bytes.Reader

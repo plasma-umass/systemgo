@@ -16,18 +16,19 @@ var ErrIsStarting = errors.New("Unit is already starting")
 type Unit struct {
 	unit.Interface
 
-	name string
-	path string
-
-	loaded unit.Load
-
-	Log *Log
-
+	// System the Unit came from
 	System *Daemon
 
-	mutex sync.Mutex
+	// Unit log
+	Log *Log
+
+	name string
+	path string
+	load unit.Load
 
 	job *job
+
+	mutex sync.Mutex
 }
 
 // TODO introduce a better workaround
@@ -37,6 +38,7 @@ const (
 	reloading = "reloading"
 )
 
+// NewUnit returns an instance of new unit wrapping v
 func NewUnit(v unit.Interface) (u *Unit) {
 	return &Unit{
 		Interface: v,
@@ -48,14 +50,19 @@ func NewUnit(v unit.Interface) (u *Unit) {
 //return u.Name()
 //}
 
+// Path returns path to the defintion unit was loaded from
 func (u *Unit) Path() string {
 	return u.path
 }
+
+// Name returns the name of the unit(filename of the defintion)
 func (u *Unit) Name() string {
 	return u.name
 }
+
+// Loaded returns load state of the unit
 func (u *Unit) Loaded() unit.Load {
-	return u.loaded
+	return u.load
 }
 
 func (u *Unit) IsDead() bool {
@@ -78,6 +85,7 @@ func (u *Unit) IsLoaded() bool {
 	return u.Loaded() == unit.Loaded
 }
 
+// IsReloader returns whether u.Interface is capable of reloading
 func (u *Unit) IsReloader() (ok bool) {
 	_, ok = u.Interface.(unit.Reloader)
 	return
@@ -117,12 +125,13 @@ func (u *Unit) jobRunning() bool {
 	return u.job != nil && u.job.IsRunning()
 }
 
+// Status returns status of the unit
 func (u *Unit) Status() unit.Status {
 	st := unit.Status{
 		Load: unit.LoadStatus{
 			Path:   u.Path(),
 			Loaded: u.Loaded(),
-			State:  unit.Enabled, // TODO
+			State:  -1, // TODO
 		},
 		Activation: unit.ActivationStatus{
 			State: u.Active(),
@@ -181,6 +190,7 @@ func (u *Unit) depDir(suffix string) (path string) {
 	return u.Path() + "." + suffix
 }
 
+// Enable creates symlinks to u definition in dependency directories of each unit dependant on u
 func (u *Unit) Enable() (err error) {
 	err = u.System.getAndExecute(u.RequiredBy(), func(dep *Unit, gerr error) error {
 		if gerr != nil {
@@ -218,6 +228,7 @@ func linkDep(dir string, dep *Unit) (err error) {
 	return os.Symlink(dep.Path(), filepath.Join(dir, dep.Name()))
 }
 
+// Disable removes symlinks(if they exist) created by Enable
 func (u *Unit) Disable() (err error) {
 	err = u.System.getAndExecute(u.RequiredBy(), func(dep *Unit, gerr error) error {
 		if gerr != nil {
@@ -254,6 +265,7 @@ func unlinkDep(dir string, dep *Unit) (err error) {
 	return nil
 }
 
+// Reload creates a new reload transaction and runs it
 func (u *Unit) Reload() (err error) {
 	log.WithField("u", u).Debugf("u.Reload")
 
@@ -274,6 +286,7 @@ func (u *Unit) reload() (err error) {
 	return reloader.Reload()
 }
 
+// Start creates a new start transaction and runs it
 func (u *Unit) Start() (err error) {
 	log.WithField("unit", u.Name()).Debugf("u.Start")
 
@@ -305,6 +318,7 @@ func (u *Unit) start() (err error) {
 	return starter.Start()
 }
 
+// Stop creates a new stop transaction and runs it
 func (u *Unit) Stop() (err error) {
 	log.WithField("u", u).Debugf("u.Stop")
 

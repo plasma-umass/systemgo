@@ -1,13 +1,12 @@
 package system
 
 import (
-	"errors"
 	"sync"
 
 	log "github.com/Sirupsen/logrus"
 )
 
-var ErrUnmergeable = errors.New("Unmergeable job types")
+const job_type_count = 4
 
 type job struct {
 	typ  jobType
@@ -24,8 +23,6 @@ type job struct {
 
 	mutex sync.Mutex
 }
-
-const JOB_TYPE_COUNT = 4
 
 func newJob(typ jobType, u *Unit) (j *job) {
 	log.WithFields(log.Fields{

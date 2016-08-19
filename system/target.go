@@ -11,9 +11,7 @@ const (
 	dead   = "dead"
 )
 
-// Target unit type.
-// Is different enough from other units to not include
-// it in the unit package
+// Target unit type is used for grouping units
 type Target struct {
 	unit.Definition
 	System *Daemon

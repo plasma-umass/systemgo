@@ -13,7 +13,7 @@ type transaction struct {
 }
 
 type prospectiveJobs struct {
-	anchored, optional [JOB_TYPE_COUNT]*job
+	anchored, optional [job_type_count]*job
 }
 
 func newTransaction() (tr *transaction) {

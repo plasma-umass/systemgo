@@ -129,7 +129,7 @@ func TestStart(t *testing.T) {
 		u, err := sys.Supervise(name, mock)
 		require.NoError(t, err)
 
-		u.loaded = unit.Loaded
+		u.load = unit.Loaded
 	}
 
 	calls := make([]*gomock.Call, len(sequence))
@@ -158,7 +158,7 @@ func TestStop(t *testing.T) {
 	sys := New()
 
 	u, err := sys.Supervise("TestStop", m)
-	u.loaded = unit.Loaded
+	u.load = unit.Loaded
 	require.NoError(t, err)
 
 	require.NoError(t, sys.Stop("TestStop"))
@@ -188,7 +188,7 @@ func TestIsolate(t *testing.T) {
 		u, err := sys.Supervise(name, mock)
 		require.NoError(t, err)
 
-		u.loaded = unit.Loaded
+		u.load = unit.Loaded
 	}
 
 	require.NoError(t, sys.Isolate("c"), "sys.Isolate")
@@ -253,7 +253,7 @@ func TestEnable(t *testing.T) {
 		}
 
 		u.path = f.Name()
-		u.loaded = unit.Loaded
+		u.load = unit.Loaded
 	}
 
 	require.NoError(t, sys.Enable("test.service"), "sys.Enable")
