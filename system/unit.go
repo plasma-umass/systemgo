@@ -58,14 +58,29 @@ func (u *Unit) Loaded() unit.Load {
 	return u.loaded
 }
 
+func (u *Unit) IsDead() bool {
+	return u.Active() == unit.Inactive
+}
 func (u *Unit) IsActive() bool {
 	return u.Active() == unit.Active
 }
-func (u *Unit) IsStarting() bool {
+func (u *Unit) IsActivating() bool {
 	return u.Active() == unit.Activating
 }
+func (u *Unit) IsDeactivating() bool {
+	return u.Active() == unit.Deactivating
+}
+func (u *Unit) IsReloading() bool {
+	return u.Active() == unit.Reloading
+}
+
 func (u *Unit) IsLoaded() bool {
 	return u.Loaded() == unit.Loaded
+}
+
+func (u *Unit) IsReloader() (ok bool) {
+	_, ok = u.Interface.(unit.Reloader)
+	return
 }
 
 func (u *Unit) Active() (st unit.Activation) {
@@ -128,11 +143,6 @@ func (u *Unit) Status() unit.Status {
 	default:
 		return st
 	}
-}
-
-func (u *Unit) IsReloader() (ok bool) {
-	_, ok = u.Interface.(unit.Reloader)
-	return
 }
 
 // Requires returns a slice of unit names as found in definition and absolute paths
