@@ -19,8 +19,7 @@ import (
 
 // Initializes the system, sets the default paths, as specified in configuration and attempts to start the default target, falls back to "rescue.target", if it fails
 func main() {
-	// Commented out while Browsix port support is not fixed
-	//go Serve()
+	go Serve()
 
 	// Initialize system
 	log.Info("Systemgo starting...")

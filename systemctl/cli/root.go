@@ -25,6 +25,9 @@ import (
 	"net/rpc"
 	"os"
 
+	log "github.com/Sirupsen/logrus"
+
+	"github.com/rvolosatovs/systemgo/config"
 	"github.com/spf13/cobra"
 )
 
@@ -49,15 +52,14 @@ func Execute() {
 	}
 }
 
-// Commented out, while Browsix ports are not fixed
-//func init() {
-//	addr := fmt.Sprintf("localhost%s", config.Port)
-//
-//	e := log.WithField("addr", addr)
-//	e.Debugf("Dialing...")
-//
-//	var err error
-//	if client, err = rpc.DialHTTP("tcp", addr); err != nil {
-//		e.Fatalf("Dial failed: %s", err)
-//	}
-//}
+func init() {
+	addr := fmt.Sprintf("localhost%s", config.Port)
+
+	e := log.WithField("addr", addr)
+	e.Debugf("Dialing...")
+
+	var err error
+	if client, err = rpc.DialHTTP("tcp", addr); err != nil {
+		e.Fatalf("Dial failed: %s", err)
+	}
+}
