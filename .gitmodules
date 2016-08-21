@@ -25,9 +25,6 @@
 [submodule "vendor/github.com/spf13/cast"]
 	path = vendor/github.com/spf13/cast
 	url = https://github.com/spf13/cast
-[submodule "vendor/github.com/spf13/cobra"]
-	path = vendor/github.com/spf13/cobra
-	url = https://github.com/spf13/cobra
 [submodule "vendor/github.com/spf13/jwalterweatherman"]
 	path = vendor/github.com/spf13/jwalterweatherman
 	url = https://github.com/spf13/jwalterweatherman
