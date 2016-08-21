@@ -12,9 +12,9 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 
-	"github.com/rvolosatovs/systemgo/config"
-	"github.com/rvolosatovs/systemgo/system"
-	"github.com/rvolosatovs/systemgo/systemctl"
+	"github.com/plasma-umass/systemgo/config"
+	"github.com/plasma-umass/systemgo/system"
+	"github.com/plasma-umass/systemgo/systemctl"
 )
 
 // Initializes the system, sets the default paths, as specified in configuration and attempts to start the default target, falls back to "rescue.target", if it fails

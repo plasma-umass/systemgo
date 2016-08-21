@@ -1,4 +1,4 @@
-REPO=github.com/rvolosatovs/systemgo
+REPO=github.com/plasma-umass/systemgo
 
 TEST=test
 UNIT=unit

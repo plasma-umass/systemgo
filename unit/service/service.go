@@ -6,7 +6,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/rvolosatovs/systemgo/unit"
+	"github.com/plasma-umass/systemgo/unit"
 
 	log "github.com/Sirupsen/logrus"
 )

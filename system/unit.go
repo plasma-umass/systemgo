@@ -8,7 +8,7 @@ import (
 	"sync"
 
 	log "github.com/Sirupsen/logrus"
-	"github.com/rvolosatovs/systemgo/unit"
+	"github.com/plasma-umass/systemgo/unit"
 )
 
 var ErrIsStarting = errors.New("Unit is already starting")

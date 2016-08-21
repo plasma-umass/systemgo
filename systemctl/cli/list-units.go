@@ -26,8 +26,8 @@ import (
 	"text/tabwriter"
 
 	log "github.com/Sirupsen/logrus"
-	"github.com/rvolosatovs/systemgo/systemctl"
-	"github.com/rvolosatovs/systemgo/unit"
+	"github.com/plasma-umass/systemgo/systemctl"
+	"github.com/plasma-umass/systemgo/unit"
 	"github.com/spf13/cobra"
 )
 

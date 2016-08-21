@@ -1,7 +1,7 @@
-[![Build Status](https://travis-ci.org/rvolosatovs/systemgo.svg?branch=master&bust=1)](https://travis-ci.org/rvolosatovs/systemgo)
-[![Coverage Status](https://coveralls.io/repos/github/rvolosatovs/systemgo/badge.svg?branch=master&bust=1)](https://coveralls.io/github/rvolosatovs/systemgo?branch=master)
-[![Go Report Card](https://goreportcard.com/badge/github.com/rvolosatovs/systemgo)](https://goreportcard.com/report/github.com/rvolosatovs/systemgo)
-[![GoDoc](https://godoc.org/github.com/rvolosatovs/systemgo?status.svg)](https://godoc.org/github.com/rvolosatovs/systemgo)
+[![Build Status](https://travis-ci.org/plasma-umass/systemgo.svg?branch=master&bust=1)](https://travis-ci.org/plasma-umass/systemgo)
+[![Coverage Status](https://coveralls.io/repos/github/plasma-umass/systemgo/badge.svg?branch=master&bust=1)](https://coveralls.io/github/plasma-umass/systemgo?branch=master)
+[![Go Report Card](https://goreportcard.com/badge/github.com/plasma-umass/systemgo)](https://goreportcard.com/report/github.com/plasma-umass/systemgo)
+[![GoDoc](https://godoc.org/github.com/plasma-umass/systemgo?status.svg)](https://godoc.org/github.com/plasma-umass/systemgo)
 [![GSoC Project abstract](http://b.repl.ca/v1/GSoC_Project-abstract-orange.png)](https://summerofcode.withgoogle.com/projects/#6227933760847872)
 # Description
 An init system in Go, intended to run on [Browsix](https://github.com/plasma-umass/browsix) and other Unix-like OS(GNU/Linux incl.)

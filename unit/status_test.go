@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/rvolosatovs/systemgo/unit"
+	"github.com/plasma-umass/systemgo/unit"
 	"github.com/stretchr/testify/assert"
 )
 

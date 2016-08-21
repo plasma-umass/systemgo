@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/rvolosatovs/systemgo/unit"
-	"github.com/rvolosatovs/systemgo/unit/service"
+	"github.com/plasma-umass/systemgo/unit"
+	"github.com/plasma-umass/systemgo/unit/service"
 
 	log "github.com/Sirupsen/logrus"
 )

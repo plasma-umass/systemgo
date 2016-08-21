@@ -6,7 +6,7 @@ import (
 	"time"
 
 	log "github.com/Sirupsen/logrus"
-	"github.com/rvolosatovs/systemgo/system"
+	"github.com/plasma-umass/systemgo/system"
 	"github.com/spf13/viper"
 )
 

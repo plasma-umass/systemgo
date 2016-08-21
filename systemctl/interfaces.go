@@ -1,8 +1,8 @@
 package systemctl
 
 import (
-	"github.com/rvolosatovs/systemgo/system"
-	"github.com/rvolosatovs/systemgo/unit"
+	"github.com/plasma-umass/systemgo/system"
+	"github.com/plasma-umass/systemgo/unit"
 )
 
 type Daemon interface {

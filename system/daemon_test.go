@@ -10,8 +10,8 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/golang/mock/gomock"
-	"github.com/rvolosatovs/systemgo/test/mock_unit"
-	"github.com/rvolosatovs/systemgo/unit"
+	"github.com/plasma-umass/systemgo/test/mock_unit"
+	"github.com/plasma-umass/systemgo/unit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
