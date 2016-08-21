@@ -27,7 +27,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 
-	"github.com/rvolosatovs/systemgo/config"
+	"github.com/plasma-umass/systemgo/config"
 	"github.com/spf13/cobra"
 )
 
